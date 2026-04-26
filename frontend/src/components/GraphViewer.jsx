@@ -10,41 +10,26 @@ import ReactFlow, {
   NodeToolbar,
   BaseEdge
 } from 'reactflow';
-import dagre from 'dagre';
+import ELK from 'elkjs/lib/elk.bundled.js';
 import * as Icons from 'lucide-react';
 import NodeSidePanel from './NodeSidePanel';
 import 'reactflow/dist/style.css';
 
-const GridEdge = ({ id, sourceX, sourceY, targetX, targetY, style = {}, markerEnd, data }) => {
-  const midX = data?.midX || (sourceX + targetX) / 2;
-  const path = `M${sourceX},${sourceY} L${midX},${sourceY} L${midX},${targetY} L${targetX},${targetY}`;
+const elk = new ELK();
 
-  return (
-    <path
-      id={id}
-      style={style}
-      className="react-flow__edge-path"
-      d={path}
-      markerEnd={markerEnd}
-    />
-  );
-};
-
-const DagreEdge = ({ id, data, style, markerEnd }) => {
+const ElkEdge = ({ id, data, style, markerEnd }) => {
   if (!data?.points || data.points.length === 0) return null;
-  
   const path = data.points.reduce(
-    (acc, point, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+    (acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`,
     ''
   );
-
   return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
 };
 
 const CustomNode = ({ data, selected }) => {
   const IconComponent = Icons[data.iconName] || Icons.Circle;
   const isHoverMode = data.showLabels === 'hover';
-  
+
   const posMap = {
     'top': Position.Top,
     'bottom': Position.Bottom,
@@ -56,8 +41,8 @@ const CustomNode = ({ data, selected }) => {
     <>
       {isPopover && (
         <NodeToolbar isVisible={selected} position={posMap[data.panelLayout] || Position.Top} offset={data.panelLayout === 'right' ? 30 : 60}>
-          <div 
-            className="node-popover-wrapper nowheel nodrag" 
+          <div
+            className="node-popover-wrapper nowheel nodrag"
             onClick={e => e.stopPropagation()}
             onMouseDown={e => e.stopPropagation()}
             onMouseUp={e => e.stopPropagation()}
@@ -66,8 +51,8 @@ const CustomNode = ({ data, selected }) => {
             onTouchStart={e => e.stopPropagation()}
             onTouchEnd={e => e.stopPropagation()}
           >
-            <NodeSidePanel 
-              node={data.fullData} 
+            <NodeSidePanel
+              node={data.fullData}
               treeData={data.treeData}
               treeId={data.treeId}
               onClose={data.onClosePanel}
@@ -87,12 +72,12 @@ const CustomNode = ({ data, selected }) => {
       )}
       <div className={`custom-node ${data.isCompleted ? 'completed' : data.isUnlocked ? 'unlocked' : 'locked'} ${isHoverMode ? 'hover-mode' : ''} ${selected ? 'is-selected' : ''}`}>
         <Handle type="target" position={Position.Left} isConnectable={false} />
-      <div className="icon-container">
-        <IconComponent size={24} />
-      </div>
-      <div className="label-container">
-        {data.label}
-      </div>
+        <div className="icon-container">
+          <IconComponent size={24} />
+        </div>
+        <div className="label-container">
+          {data.label}
+        </div>
         <Handle type="source" position={Position.Right} isConnectable={false} />
       </div>
     </>
@@ -102,100 +87,101 @@ const CustomNode = ({ data, selected }) => {
 const nodeWidth = 60;
 const nodeHeight = 60;
 
-const assignDynamicWeights = (nodes, edges) => {
-  const adj = {};
-  const inDegree = {};
-  const dist = {};
-  const prev = {};
+const calculateAlapLayers = (nodes, edges) => {
+  const outEdges = {};
+  nodes.forEach((n) => { outEdges[n.id] = []; });
+  edges.forEach((e) => { outEdges[e.source].push(e.target); });
 
+  const memo = {};
+
+  // DFS to find the longest path from a node to any sink
+  const getLongestPath = (nodeId) => {
+    if (memo[nodeId] !== undefined) return memo[nodeId];
+    if (outEdges[nodeId].length === 0) return 0;
+
+    let maxPath = 0;
+    for (const target of outEdges[nodeId]) {
+      maxPath = Math.max(maxPath, 1 + getLongestPath(target));
+    }
+
+    memo[nodeId] = maxPath;
+    return maxPath;
+  };
+
+  nodes.forEach((n) => getLongestPath(n.id));
+
+  // The maximum path length dictates the total number of columns
+  const maxGraphPath = Math.max(...Object.values(memo), 0);
+
+  // Layer = max depth minus the node's longest path to the end
+  const nodeLayers = {};
   nodes.forEach((n) => {
-    adj[n.id] = [];
-    inDegree[n.id] = 0;
-    dist[n.id] = 0;
-    prev[n.id] = null;
+    nodeLayers[n.id] = maxGraphPath - (memo[n.id] || 0);
   });
 
-  edges.forEach((e) => {
-    if (adj[e.source]) adj[e.source].push(e.target);
-    if (inDegree[e.target] !== undefined) inDegree[e.target]++;
-  });
-
-  // 1. Kahn's Algorithm for Topological Sort
-  const topo = [];
-  const queue = Object.keys(inDegree).filter((id) => inDegree[id] === 0);
-
-  while (queue.length > 0) {
-    const u = queue.shift();
-    topo.push(u);
-    adj[u].forEach((v) => {
-      inDegree[v]--;
-      if (inDegree[v] === 0) queue.push(v);
-    });
-  }
-
-  // 2. Calculate the Longest Path
-  topo.forEach((u) => {
-    adj[u].forEach((v) => {
-      if (dist[u] + 1 > dist[v]) {
-        dist[v] = dist[u] + 1;
-        prev[v] = u;
-      }
-    });
-  });
-
-  // 3. Backtrack from the furthest node to identify Critical Path edges
-  let endNode = Object.keys(dist).reduce((a, b) => (dist[a] > dist[b] ? a : b), topo[0]);
-  const criticalEdges = new Set();
-  
-  while (endNode && prev[endNode]) {
-    criticalEdges.add(`${prev[endNode]}->${endNode}`);
-    endNode = prev[endNode];
-  }
-
-  // 4. Return edges with assigned weights
-  return edges.map((e) => ({
-    ...e,
-    data: {
-      ...e.data,
-      weight: criticalEdges.has(`${e.source}->${e.target}`) ? 10 : 1,
-    },
-  }));
+  return nodeLayers;
 };
 
-const getLayoutedElements = (nodes, edges, direction = 'LR') => {
-  const weightedEdges = assignDynamicWeights(nodes, edges);
-  
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ 
-    rankdir: direction, 
-    ranker: 'longest-path',
-    nodesep: 100,
-    ranksep: 160,
-    marginx: 50,
-    marginy: 50
-  });
+const getLayoutedElements = async (nodes, edges, direction = 'RIGHT') => {
+  const layers = calculateAlapLayers(nodes, edges);
 
-  nodes.forEach((node) => dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }));
-  weightedEdges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target, { weight: edge.data.weight });
-  });
+  const graph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': direction,
+      'elk.edgeRouting': 'POLYLINE',
+      'elk.portConstraints': 'FIXED_SIDE',
+      // Force ELK to respect our exact ALAP layer calculations
+      'elk.layered.layering.strategy': 'INTERACTIVE',
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.portRouting': 'DISTRIBUTED',
+      'elk.layered.spacing.edgeNodeBetweenLayers': '50',
+      'elk.spacing.edgeEdge': '20',
+      'elk.spacing.nodeNode': '100',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '160',
+      'elk.padding': '[top=50,left=50,bottom=50,right=50]'
+    },
+    children: nodes.map((node) => ({
+      id: node.id,
+      width: nodeWidth,
+      height: nodeHeight,
+      layoutOptions: {
+        // Inject the calculated layer as a string
+        'elk.layered.layer': Number(layers[node.id])
+      }
+    })),
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    })),
+  };
 
-  dagre.layout(dagreGraph);
+  const layout = await elk.layout(graph);
 
   const layoutedNodes = nodes.map((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
+    const elkNode = layout.children.find((n) => n.id === node.id);
     return {
       ...node,
-      targetPosition: direction === 'TB' ? Position.Top : Position.Left,
-      sourcePosition: direction === 'TB' ? Position.Bottom : Position.Right,
-      position: { x: nodeWithPosition.x - nodeWidth / 2, y: nodeWithPosition.y - nodeHeight / 2 },
+      targetPosition: direction === 'DOWN' ? Position.Top : Position.Left,
+      sourcePosition: direction === 'DOWN' ? Position.Bottom : Position.Right,
+      position: { x: elkNode.x, y: elkNode.y },
     };
   });
-  const layoutedEdges = weightedEdges.map((edge) => {
-    const edgeWithPosition = dagreGraph.edge(edge.source, edge.target);
-    let points = [...edgeWithPosition.points];
-    
+
+  const layoutedEdges = edges.map((edge) => {
+    const elkEdge = layout.edges.find((e) => e.id === edge.id);
+    let points = [];
+
+    if (elkEdge?.sections) {
+      elkEdge.sections.forEach((section) => {
+        points.push(section.startPoint);
+        if (section.bendPoints) points.push(...section.bendPoints);
+        points.push(section.endPoint);
+      });
+    }
+
     // Add a small visual gap (offset) between the node and the edge start/end
     const gap = 10;
     if (points.length >= 2) {
@@ -222,7 +208,7 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
 
     return {
       ...edge,
-      type: 'dagre',
+      type: 'elk',
       data: { ...edge.data, points },
     };
   });
@@ -235,8 +221,7 @@ const nodeTypes = {
 };
 
 const edgeTypes = {
-  grid: GridEdge,
-  dagre: DagreEdge,
+  elk: ElkEdge,
 };
 
 const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [], isDebugMode, setIsDebugMode, selectedNodeId, selectedNodeFullData, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, panelLayout, setPanelLayout, tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments }) => {
@@ -253,26 +238,10 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
       const isCompleted = completedNodes.includes(node.node_id);
       const isUnlocked = unlockedNodes.includes(node.node_id);
       const isLocked = !isCompleted && !isUnlocked;
-      
-      let background = 'var(--bg-panel)';
-      let color = 'var(--text-primary)';
-      let borderColor = 'var(--border-color)';
-
-      if (isCompleted) {
-        background = 'rgba(16, 185, 129, 0.2)'; // green
-        borderColor = 'rgb(16, 185, 129)';
-      } else if (isUnlocked) {
-        background = 'rgba(59, 130, 246, 0.2)'; // blue
-        borderColor = 'rgb(59, 130, 246)';
-      } else if (isLocked) {
-        background = 'rgba(156, 163, 175, 0.1)'; // gray
-        color = 'var(--text-secondary)';
-        borderColor = 'rgba(156, 163, 175, 0.3)';
-      }
 
       return {
         id: node.node_id,
-        data: { 
+        data: {
           label: node.concept_name,
           iconName: node.icon_name || 'Circle',
           fullData: node,
@@ -304,17 +273,17 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
     // Process edges
     const initialEdges = (data.directed_acyclic_graph || []).map((edge, index) => {
       const isSourceCompleted = completedNodes.includes(edge.source);
-      
+
       let edgeColor = 'var(--text-secondary)';
       if (isSourceCompleted) {
         edgeColor = 'rgb(16, 185, 129)'; // green
       }
-      
+
       return {
         id: `e-${edge.source}-${edge.target}-${index}`,
         source: edge.source,
         target: edge.target,
-        type: 'dagre',
+        type: 'elk',
         animated: false,
         style: { stroke: edgeColor, strokeWidth: 2 },
         markerEnd: {
@@ -324,27 +293,24 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
       };
     });
 
-    // Calculate layout
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      initialNodes,
-      initialEdges
-    );
-
-    setNodes((currentNodes) => {
-      return layoutedNodes.map(n => {
-        const existingNode = currentNodes.find(cn => cn.id === n.id);
-        return {
-          ...n,
-          selected: existingNode ? existingNode.selected : false
-        };
+    // Calculate layout asynchronously
+    getLayoutedElements(initialNodes, initialEdges).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+      setNodes((currentNodes) => {
+        return layoutedNodes.map(n => {
+          const existingNode = currentNodes.find(cn => cn.id === n.id);
+          return {
+            ...n,
+            selected: existingNode ? existingNode.selected : false
+          };
+        });
       });
+      setEdges(layoutedEdges);
     });
-    setEdges(layoutedEdges);
   }, [data, completedNodes, unlockedNodes, showLabels, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, isDebugMode, panelLayout, tutorHistories, examinerAssessments, setNodes, setEdges]);
 
   // Sync ReactFlow selection with App.jsx selectedNodeId
   useEffect(() => {
-    setNodes((nds) => 
+    setNodes((nds) =>
       nds.map((node) => ({
         ...node,
         selected: node.id === selectedNodeId,
@@ -359,7 +325,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
         let offsetX = 0;
         let offsetY = 0;
         const zoom = 1.2;
-        
+
         if (panelLayout === 'top') {
           offsetY = -(window.innerHeight * 0.35) / zoom;
         } else if (panelLayout === 'bottom') {
@@ -371,8 +337,8 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
         }
 
         rfInstance.setCenter(
-          node.position.x + nodeWidth / 2 + offsetX, 
-          node.position.y + nodeHeight / 2 + offsetY, 
+          node.position.x + nodeWidth / 2 + offsetX,
+          node.position.y + nodeHeight / 2 + offsetY,
           { duration: 800, zoom }
         );
       }
@@ -383,20 +349,20 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }} className="animate-fade-in">
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, display: 'flex', gap: '10px' }}>
-        <button 
+        <button
           onClick={() => setShowLabels(prev => prev === 'always' ? 'hover' : 'always')}
           style={{ padding: '8px 16px', background: 'var(--bg-panel)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer' }}
         >
           {showLabels === 'always' ? 'Hide Labels (Hover)' : 'Always Show Labels'}
         </button>
-        <button 
+        <button
           onClick={() => setIsDebugMode(prev => !prev)}
           style={{ padding: '8px 16px', background: isDebugMode ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-panel)', color: isDebugMode ? 'var(--accent-color)' : 'var(--text-secondary)', border: `1px solid ${isDebugMode ? 'var(--accent-color)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}
         >
           Debug Mode: {isDebugMode ? 'ON' : 'OFF'}
         </button>
         <div className="layout-dropdown-wrapper">
-          <select 
+          <select
             value={panelLayout}
             onChange={(e) => setPanelLayout(e.target.value)}
             className="layout-select"
@@ -411,33 +377,33 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
       </div>
       <div style={{ width: panelLayout === 'sidebar' && selectedNodeId ? 'calc(100% - 400px)' : '100%', height: '100%', transition: 'width 0.3s ease' }}>
         <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
-        onPaneClick={onClosePanel}
-        onInit={setRfInstance}
-        fitView
-        minZoom={0.2}
-        maxZoom={1.5}
-        defaultEdgeOptions={{ zIndex: 0 }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={true}
-      >
-        <Controls 
-          style={{ background: 'var(--bg-panel)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }} 
-          className="custom-controls"
-        />
-        <Background color="var(--border-color)" gap={20} size={1} />
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={handleNodeClick}
+          onPaneClick={onClosePanel}
+          onInit={setRfInstance}
+          fitView
+          minZoom={0.2}
+          maxZoom={1.5}
+          defaultEdgeOptions={{ zIndex: 0 }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={true}
+        >
+          <Controls
+            style={{ background: 'var(--bg-panel)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+            className="custom-controls"
+          />
+          <Background color="var(--border-color)" gap={20} size={1} />
         </ReactFlow>
       </div>
       {panelLayout === 'sidebar' && selectedNodeId && (
         <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '400px', zIndex: 50 }}>
-          <NodeSidePanel 
+          <NodeSidePanel
             node={selectedNodeFullData}
             treeData={data}
             treeId={treeId}
