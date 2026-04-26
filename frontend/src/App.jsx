@@ -109,6 +109,40 @@ function App() {
     setSelectedNode(nodeData);
   }, []);
 
+  const handleRenameTree = async (treeId, newTitle) => {
+    try {
+      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (!res.ok) throw new Error('Failed to rename skill tree');
+      fetchSkillTrees(); // Refresh list
+    } catch (err) {
+      console.error(err);
+      setError('Failed to rename paper.');
+    }
+  };
+
+  const handleDeleteTree = async (treeId) => {
+    if (!window.confirm('Are you sure you want to delete this paper?')) return;
+    try {
+      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete skill tree');
+      if (selectedTreeId === treeId) {
+        setTreeData(null);
+        setSelectedTreeId(null);
+        setSelectedNode(null);
+      }
+      fetchSkillTrees(); // Refresh list
+    } catch (err) {
+      console.error(err);
+      setError('Failed to delete paper.');
+    }
+  };
+
   const handleClosePanel = useCallback(() => {
     setSelectedNode(null);
   }, []);
@@ -125,6 +159,8 @@ function App() {
         skillTrees={skillTrees} 
         onSelectTree={loadSkillTree}
         onUpload={handleUpload}
+        onDeleteTree={handleDeleteTree}
+        onRenameTree={handleRenameTree}
         selectedTreeId={selectedTreeId}
         isLoading={isLoading}
       />

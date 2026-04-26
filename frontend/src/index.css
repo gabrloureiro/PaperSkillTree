@@ -68,10 +68,6 @@ body {
   box-shadow: none !important;
 }
 
-.react-flow__node-custom:hover {
-  box-shadow: none !important;
-  transform: none !important;
-}
 
 .react-flow__node-custom.selected .custom-node {
   border-color: var(--accent-color);
@@ -97,7 +93,7 @@ body {
   border: 2px solid var(--node-border);
   color: var(--node-text);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s ease-in-out;
+  transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out, background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 .custom-node .icon-container {

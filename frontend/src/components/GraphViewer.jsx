@@ -130,16 +130,21 @@ const getLayoutedElements = async (nodes, edges, direction = 'RIGHT') => {
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': direction,
-      'elk.edgeRouting': 'POLYLINE',
-      'elk.portConstraints': 'FIXED_SIDE',
+      'elk.edgeRouting': 'ORTHOGONAL',
       // Force ELK to respect our exact ALAP layer calculations
       'elk.layered.layering.strategy': 'INTERACTIVE',
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+      'elk.layered.nodePlacement.bk.fixedAlignment': 'LEFTUP',
+      'elk.layered.nodePlacement.bk.edgeStraightening': 'false',
       'elk.layered.portRouting': 'DISTRIBUTED',
+      'elk.portConstraints': 'FIXED_SIDE',
       'elk.layered.spacing.edgeNodeBetweenLayers': '50',
-      'elk.spacing.edgeEdge': '20',
-      'elk.spacing.nodeNode': '100',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '160',
+      'elk.layered.mergeEdges': 'true',
+      'elk.layered.unnecessaryBendpoints': 'true',
+      'elk.spacing.edgeEdge': '0',
+      'elk.spacing.nodeNode': '40',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '275',
       'elk.padding': '[top=50,left=50,bottom=50,right=50]'
     },
     children: nodes.map((node) => ({
@@ -216,12 +221,58 @@ const getLayoutedElements = async (nodes, edges, direction = 'RIGHT') => {
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
+const DagreLikeEdge = ({ id, data, style, markerEnd }) => {
+  const points = data?.points;
+  if (!points || points.length < 2) return null;
+
+  const borderRadius = 10; // Adjust this for more/less rounding
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+
+    if (next) {
+      // Calculate vectors for the current and next segments
+      const d1 = { x: curr.x - prev.x, y: curr.y - prev.y };
+      const d2 = { x: next.x - curr.x, y: next.y - curr.y };
+
+      const len1 = Math.sqrt(d1.x ** 2 + d1.y ** 2);
+      const len2 = Math.sqrt(d2.x ** 2 + d2.y ** 2);
+
+      // Don't round if segments are shorter than the radius
+      const r = Math.min(borderRadius, len1 / 2, len2 / 2);
+
+      // Line to the start of the curve
+      const lineEnd = {
+        x: curr.x - (d1.x / len1) * r,
+        y: curr.y - (d1.y / len1) * r
+      };
+
+      // End of the curve
+      const curveEnd = {
+        x: curr.x + (d2.x / len2) * r,
+        y: curr.y + (d2.y / len2) * r
+      };
+
+      path += ` L ${lineEnd.x} ${lineEnd.y} Q ${curr.x} ${curr.y} ${curveEnd.x} ${curveEnd.y}`;
+    } else {
+      // Last point
+      path += ` L ${curr.x} ${curr.y}`;
+    }
+  }
+
+  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+};
+
 const nodeTypes = {
   custom: CustomNode,
 };
 
 const edgeTypes = {
-  elk: ElkEdge,
+  elk: DagreLikeEdge,
 };
 
 const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [], isDebugMode, setIsDebugMode, selectedNodeId, selectedNodeFullData, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, panelLayout, setPanelLayout, tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments }) => {
@@ -285,6 +336,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
         target: edge.target,
         type: 'elk',
         animated: false,
+        zIndex: isSourceCompleted ? 0 : 10, // Completed (green) lines stay at the bottom
         style: { stroke: edgeColor, strokeWidth: 2 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
