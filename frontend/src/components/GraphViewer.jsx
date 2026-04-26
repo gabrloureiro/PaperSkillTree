@@ -122,7 +122,7 @@ const calculateAlapLayers = (nodes, edges) => {
   return nodeLayers;
 };
 
-const getLayoutedElements = async (nodes, edges, direction = 'RIGHT') => {
+const getLayoutedElements = async (nodes, edges, direction = 'RIGHT', mergeEdges = false) => {
   const layers = calculateAlapLayers(nodes, edges);
 
   const graph = {
@@ -140,7 +140,7 @@ const getLayoutedElements = async (nodes, edges, direction = 'RIGHT') => {
       'elk.layered.portRouting': 'DISTRIBUTED',
       'elk.portConstraints': 'FIXED_SIDE',
       'elk.layered.spacing.edgeNodeBetweenLayers': '50',
-      'elk.layered.mergeEdges': 'true',
+      'elk.layered.mergeEdges': mergeEdges.toString(),
       'elk.layered.unnecessaryBendpoints': 'true',
       'elk.spacing.edgeEdge': '0',
       'elk.spacing.nodeNode': '40',
@@ -279,6 +279,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [showLabels, setShowLabels] = useState('always'); // 'always' or 'hover'
+  const [mergeEdges, setMergeEdges] = useState(false);
   const [rfInstance, setRfInstance] = useState(null);
 
   useEffect(() => {
@@ -346,7 +347,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
     });
 
     // Calculate layout asynchronously
-    getLayoutedElements(initialNodes, initialEdges).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+    getLayoutedElements(initialNodes, initialEdges, 'RIGHT', mergeEdges).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
       setNodes((currentNodes) => {
         return layoutedNodes.map(n => {
           const existingNode = currentNodes.find(cn => cn.id === n.id);
@@ -358,7 +359,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
       });
       setEdges(layoutedEdges);
     });
-  }, [data, completedNodes, unlockedNodes, showLabels, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, isDebugMode, panelLayout, tutorHistories, examinerAssessments, setNodes, setEdges]);
+  }, [data, completedNodes, unlockedNodes, showLabels, mergeEdges, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, isDebugMode, panelLayout, tutorHistories, examinerAssessments, setNodes, setEdges]);
 
   // Sync ReactFlow selection with App.jsx selectedNodeId
   useEffect(() => {
@@ -412,6 +413,12 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
           style={{ padding: '8px 16px', background: isDebugMode ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-panel)', color: isDebugMode ? 'var(--accent-color)' : 'var(--text-secondary)', border: `1px solid ${isDebugMode ? 'var(--accent-color)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}
         >
           Debug Mode: {isDebugMode ? 'ON' : 'OFF'}
+        </button>
+        <button
+          onClick={() => setMergeEdges(prev => !prev)}
+          style={{ padding: '8px 16px', background: mergeEdges ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-panel)', color: mergeEdges ? 'var(--accent-color)' : 'var(--text-secondary)', border: `1px solid ${mergeEdges ? 'var(--accent-color)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}
+        >
+          Merge Edges: {mergeEdges ? 'ON' : 'OFF'}
         </button>
         <div className="layout-dropdown-wrapper">
           <select
