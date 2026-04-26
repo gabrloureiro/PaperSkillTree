@@ -7,8 +7,13 @@ class CartographerNodeModel(BaseModel):
     icon_name: str
     source_section_header: str
 
+class DAGEdgeModel(BaseModel):
+    source: str
+    target: str
+
 class CartographerOutputModel(BaseModel):
     nodes: List[CartographerNodeModel]
+    skeleton_dag: List[DAGEdgeModel]
 
 class ExpertOutputModel(BaseModel):
     node_id: str
@@ -25,10 +30,6 @@ class ValidatorOutputModel(BaseModel):
     is_valid: bool
     hallucination_flags: List[HallucinationFlagModel]
 
-class DAGEdgeModel(BaseModel):
-    source: str
-    target: str
-
 class SynthesizerOutputModel(BaseModel):
     directed_acyclic_graph: List[DAGEdgeModel]
 
@@ -42,3 +43,8 @@ class TutorResponseModel(BaseModel):
 
 class AuditedResponseModel(BaseModel):
     response: str
+
+class StructuralAuditorOutputModel(BaseModel):
+    is_valid: bool
+    reasoning: str
+    suggested_changes: List[str]

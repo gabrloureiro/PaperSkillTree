@@ -69,10 +69,46 @@
             },
             "additionalProperties": false
         },
+        "DAGEdge": {
+            "type": "object",
+            "required": [
+                "source",
+                "target"
+            ],
+            "properties": {
+                "source": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "StructuralAuditorInput": {
+            "type": "object",
+            "required": [
+                "skill_tree_nodes",
+                "final_dag"
+            ],
+            "properties": {
+                "skill_tree_nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ExpertOutput"
+                    }
+                },
+                "final_dag": {
+                    "$ref": "#/definitions/SynthesizerOutput"
+                }
+            },
+            "additionalProperties": false
+        },
         "CartographerOutput": {
             "type": "object",
             "required": [
-                "nodes"
+                "nodes",
+                "skeleton_dag"
             ],
             "properties": {
                 "nodes": {
@@ -100,6 +136,12 @@
                             }
                         },
                         "additionalProperties": false
+                    }
+                },
+                "skeleton_dag": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/DAGEdge"
                     }
                 }
             },
@@ -169,20 +211,30 @@
                 "directed_acyclic_graph": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "required": [
-                            "source",
-                            "target"
-                        ],
-                        "properties": {
-                            "source": {
-                                "type": "string"
-                            },
-                            "target": {
-                                "type": "string"
-                            }
-                        },
-                        "additionalProperties": false
+                        "$ref": "#/definitions/DAGEdge"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "StructuralAuditorOutput": {
+            "type": "object",
+            "required": [
+                "is_valid",
+                "reasoning",
+                "suggested_changes"
+            ],
+            "properties": {
+                "is_valid": {
+                    "type": "boolean"
+                },
+                "reasoning": {
+                    "type": "string"
+                },
+                "suggested_changes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             },

@@ -44,6 +44,9 @@ class GraphBuilder:
         branch_graph = self._build_branch_graph()
         builder.add_node("branch_worker", branch_graph)
         
+        builder.add_node("synthesizer", self.agents.synthesizer)
+        builder.add_node("structural_auditor", self.agents.structural_auditor)
+
         # Define Edges
         builder.add_edge(START, "cartographer")
         builder.add_conditional_edges(
@@ -51,7 +54,13 @@ class GraphBuilder:
             self._distribute_nodes
         )
         
-        builder.add_edge("branch_worker", END)
+        builder.add_edge("branch_worker", "synthesizer")
+        builder.add_edge("synthesizer", "structural_auditor")
+        
+        builder.add_conditional_edges(
+            "structural_auditor",
+            self._route_after_auditor
+        )
         
         return builder.compile()
 
@@ -109,3 +118,13 @@ class GraphBuilder:
             return END
         else:
             return "resolution"
+
+    async def _route_after_auditor(self, state: PaperState) -> str:
+        """
+        Routing logic for the structural auditor.
+        """
+        feedback = state.get("audit_feedback") or {}
+        if feedback.get("is_valid") or state.get("audit_revision_count", 0) >= 3:
+            return END
+        else:
+            return "synthesizer"

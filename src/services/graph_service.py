@@ -32,16 +32,15 @@ class GraphService:
             "raw_text": chunks,
             "skill_tree_nodes": [],
             "unprocessed_nodes": [],
-            "final_dag": None
+            "skeleton_dag": [],
+            "final_dag": None,
+            "audit_feedback": None,
+            "audit_revision_count": 0
         }
         final_state = await self.graph.ainvoke(initial_state)
         
-        # --- MANUAL SYNTHESIS STEP ---
         skill_tree_nodes = final_state.get("skill_tree_nodes", [])
-        final_dag = {}
-        if skill_tree_nodes:
-            synthesis_output = await self.graph_builder.agents.synthesizer({"skill_tree_nodes": skill_tree_nodes})
-            final_dag = synthesis_output.get("final_dag", {})
+        final_dag = final_state.get("final_dag", {})
         
         title = await self._get_title(chunks)
 
@@ -64,7 +63,10 @@ class GraphService:
             "raw_text": chunks,
             "skill_tree_nodes": [],
             "unprocessed_nodes": [],
-            "final_dag": None
+            "skeleton_dag": [],
+            "final_dag": None,
+            "audit_feedback": None,
+            "audit_revision_count": 0
         }
 
         last_state = initial_state
@@ -90,18 +92,9 @@ class GraphService:
                     last_state = event.get("data", {}).get("output")
                     yield {"type": "status", "content": "Concept extraction finished."}
 
-        # --- FINAL SYNTHESIS EVENT ---
-        yield {"type": "status", "content": "Synthesizing final skill tree..."}
+        # --- FINAL RESULT FROM STATE ---
         skill_tree_nodes = last_state.get("skill_tree_nodes", [])
-        final_dag = {}
-        if skill_tree_nodes:
-            synthesis_output = await self.graph_builder.agents.synthesizer({"skill_tree_nodes": skill_tree_nodes})
-            final_dag = synthesis_output.get("final_dag", {})
-            yield {
-                "type": "node_end",
-                "node": "synthesizer",
-                "output": {"final_dag": final_dag}
-            }
+        final_dag = last_state.get("final_dag", {})
         
         title = await self._get_title(chunks)
         final_result = {
