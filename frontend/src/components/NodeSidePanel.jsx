@@ -1,8 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, BookOpen, FileText, Send, User, GraduationCap, ClipboardCheck, CheckCircle } from 'lucide-react';
+import { X, BookOpen, FileText, Send, User, GraduationCap, ClipboardCheck, CheckCircle, History, ChevronRight } from 'lucide-react';
+import { getGradeColorClass, isPassing } from './GradeSelector';
 import './NodeSidePanel.css';
 
-const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isCompleted, markCompleted, isDebugMode, toggleCompleted, layout = 'right', tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments }) => {
+const AutoScalingTextarea = ({ value, onChange, onKeyDown, placeholder, disabled, maxRows = 8 }) => {
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '38px';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      if (value && scrollHeight > 40) {
+        const newHeight = Math.min(scrollHeight, maxRows * 22);
+        textareaRef.current.style.height = `${newHeight}px`;
+      }
+    }
+  }, [value, maxRows]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      disabled={disabled}
+      className="auto-scaling-textarea"
+      rows={1}
+    />
+  );
+};
+
+const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isCompleted, markCompleted, isDebugMode, toggleCompleted, layout = 'right', tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments, passingGrade }) => {
   const [activeTab, setActiveTab] = useState('explanation'); // explanation, tutor, examiner
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -16,25 +45,36 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
     }));
   };
 
-  const assessment = examinerAssessments[node?.node_id] || null;
-  const setAssessment = (ass) => {
+  let assessments = examinerAssessments[node?.node_id] || [];
+  if (assessments && !Array.isArray(assessments)) {
+    assessments = [assessments];
+  }
+  
+  const [showHistory, setShowHistory] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const currentAssessment = assessments.length > 0 ? assessments[assessments.length - 1] : null;
+
+  const addAssessment = (ass) => {
     setExaminerAssessments(prev => ({
       ...prev,
-      [node.node_id]: ass
+      [node.node_id]: [...(prev[node.node_id] || []), { ...ass, timestamp: Date.now() }]
     }));
+    setIsRetrying(false);
   };
 
   useEffect(() => {
     // Reset input when a new node is opened
     setActiveTab('explanation');
     setInputText('');
+    setIsRetrying(false);
+    setShowHistory(false);
   }, [node]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [tutorHistory, activeTab, assessment]);
+  }, [tutorHistory, activeTab, assessments]);
 
   if (!node) return null;
 
@@ -69,11 +109,12 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
             node_id: node.node_id,
             tree_id: treeId,
             message: userMessage.content,
-            chat_history: []
+            chat_history: [],
+            passing_grade: passingGrade
           })
         });
         const data = await res.json();
-        setAssessment(data);
+        addAssessment({ ...data, user_explanation: userMessage.content });
         if (data.passed) {
           markCompleted();
         }
@@ -108,11 +149,15 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
       </div>
       
       <div className="chat-input-wrapper">
-        <input 
-          type="text" 
+        <AutoScalingTextarea 
           value={inputText}
           onChange={e => setInputText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
           placeholder="Ask a question..."
           disabled={isLoading}
         />
@@ -132,23 +177,70 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
       );
     }
 
-    if (assessment) {
-      const displayGrade = assessment.letter_grade || (assessment.passed ? 'A' : 'F');
-      const gradeBase = displayGrade.charAt(0).toLowerCase();
+    if (currentAssessment && !showHistory && !isRetrying) {
+      const displayGrade = currentAssessment.letter_grade || (currentAssessment.passed ? 'A' : 'F');
+      const gradeColorClass = getGradeColorClass(displayGrade);
       
       return (
         <div className="chat-container">
-          <div className={`grade-box grade-${gradeBase}`}>
-            <div className="grade-header">
-              <h3 className="grade-title">{assessment.passed ? 'Excellent!' : 'Needs Work'}</h3>
-              <span className="grade-badge">{displayGrade}</span>
+          <div className="examiner-view">
+            <div className={`grade-card large ${gradeColorClass} selected`}>
+               <div className="card-letter">{displayGrade}</div>
+               <div className="card-content">
+                 <div className="card-header-row">
+                    <h3 className="card-status-title">{currentAssessment.passed ? 'Excellent!' : 'Needs Work'}</h3>
+                    <button className="history-btn" onClick={() => setShowHistory(true)}>
+                      <History size={14} /> History
+                    </button>
+                 </div>
+                 <div className="card-explanation">{currentAssessment.response}</div>
+               </div>
             </div>
-            <p className="grade-explanation">{assessment.response}</p>
-            {!assessment.passed && (
-               <button onClick={() => { setAssessment(null); setInputText(''); }} style={{marginTop: '10px', padding: '8px 16px', background: 'var(--bg-panel)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start'}}>
-                 Try Again
-               </button>
-            )}
+
+            <div className="user-explanation-box">
+              <div className="box-label">Your Explanation:</div>
+              <div className="box-content">{currentAssessment.user_explanation}</div>
+            </div>
+          </div>
+          
+          <div className="chat-input-wrapper" style={{ marginTop: 'auto', padding: '16px 0' }}>
+            <button 
+              onClick={() => { 
+                setInputText(currentAssessment.user_explanation || ""); 
+                setIsRetrying(true);
+              }} 
+              className="btn-primary"
+              style={{ width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: '600' }}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (showHistory) {
+      return (
+        <div className="chat-container">
+          <div className="history-view animate-fade-in">
+            <div className="history-header">
+              <button className="back-btn" onClick={() => setShowHistory(false)}>
+                <ChevronRight size={18} style={{ transform: 'rotate(180deg)' }} /> Back
+              </button>
+              <h3>Previous Attempts</h3>
+            </div>
+            <div className="history-list">
+              {[...assessments].reverse().map((ass, idx) => {
+                const grade = ass.letter_grade || (ass.passed ? 'A' : 'F');
+                const colorClass = getGradeColorClass(grade);
+                return (
+                  <div key={idx} className={`history-card ${colorClass}`}>
+                    <div className="history-user-text">{ass.user_explanation}</div>
+                    <div className="history-grade">{grade}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       );
@@ -161,11 +253,15 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
         </div>
         {!isCompleted ? (
           <div className="chat-input-wrapper">
-            <input 
-              type="text" 
+            <AutoScalingTextarea 
               value={inputText} 
               onChange={e => setInputText(e.target.value)} 
-              onKeyDown={e => e.key === 'Enter' && handleSend()} 
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }} 
               placeholder="Type your explanation..." 
               disabled={isLoading}
             />
@@ -212,22 +308,27 @@ const NodeSidePanel = ({ node, treeData, treeId, onClose, isUnlocked, isComplete
               >
                 Force {isCompleted ? 'Uncomplete' : 'Complete'}
               </button>
-              {['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'].map(grade => (
-                <button 
-                  key={grade}
-                  onClick={() => {
-                    setActiveTab('examiner');
-                    setAssessment({
-                      passed: ['A+', 'A', 'A-', 'B+', 'B', 'B-'].includes(grade),
-                      letter_grade: grade,
-                      response: `This is a mocked ${grade} grade response generated by Debug Mode.`
-                    });
-                  }}
-                  style={{ flex: '1 1 20%', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', minWidth: '40px' }}
-                >
-                  {grade}
-                </button>
-              ))}
+              {['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'].map(grade => {
+                const passed = isPassing(grade, passingGrade);
+                return (
+                  <button 
+                    key={grade}
+                    onClick={() => {
+                      setActiveTab('examiner');
+                      addAssessment({
+                        passed,
+                        letter_grade: grade,
+                        response: `This is a mocked ${grade} grade response generated by Debug Mode.`,
+                        user_explanation: "This is a mock explanation for debug purposes."
+                      });
+                      if (passed) markCompleted();
+                    }}
+                    style={{ flex: '1 1 20%', background: 'var(--bg-panel)', border: passed ? '1px solid #10b981' : '1px solid var(--border-color)', color: passed ? '#10b981' : 'var(--text-secondary)', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', minWidth: '40px' }}
+                  >
+                    {grade}
+                  </button>
+                );
+              })}
             </div>
           )}
 

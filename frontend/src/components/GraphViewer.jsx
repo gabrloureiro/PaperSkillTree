@@ -13,6 +13,7 @@ import ReactFlow, {
 import ELK from 'elkjs/lib/elk.bundled.js';
 import * as Icons from 'lucide-react';
 import NodeSidePanel from './NodeSidePanel';
+import GradeSelector from './GradeSelector';
 import 'reactflow/dist/style.css';
 
 const elk = new ELK();
@@ -66,6 +67,7 @@ const CustomNode = ({ data, selected }) => {
               setTutorHistories={data.setTutorHistories}
               examinerAssessments={data.examinerAssessments}
               setExaminerAssessments={data.setExaminerAssessments}
+              passingGrade={data.passingGrade}
             />
           </div>
         </NodeToolbar>
@@ -275,7 +277,7 @@ const edgeTypes = {
   elk: DagreLikeEdge,
 };
 
-const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [], isDebugMode, setIsDebugMode, selectedNodeId, selectedNodeFullData, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, panelLayout, setPanelLayout, tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments }) => {
+const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [], isDebugMode, setIsDebugMode, selectedNodeId, selectedNodeFullData, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, panelLayout, setPanelLayout, tutorHistories, setTutorHistories, examinerAssessments, setExaminerAssessments, passingGrade, setPassingGrade }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [showLabels, setShowLabels] = useState('always'); // 'always' or 'hover'
@@ -311,7 +313,8 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
           tutorHistories,
           setTutorHistories,
           examinerAssessments,
-          setExaminerAssessments
+          setExaminerAssessments,
+          passingGrade
         },
         position: { x: 0, y: 0 },
         type: 'custom',
@@ -359,7 +362,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
       });
       setEdges(layoutedEdges);
     });
-  }, [data, completedNodes, unlockedNodes, showLabels, mergeEdges, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, isDebugMode, panelLayout, tutorHistories, examinerAssessments, setNodes, setEdges]);
+  }, [data, completedNodes, unlockedNodes, showLabels, mergeEdges, treeId, onClosePanel, markNodeCompleted, toggleNodeCompleted, isDebugMode, panelLayout, tutorHistories, examinerAssessments, setNodes, setEdges, passingGrade]);
 
   // Sync ReactFlow selection with App.jsx selectedNodeId
   useEffect(() => {
@@ -433,6 +436,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
           </select>
           <Icons.ChevronDown size={16} className="dropdown-icon" />
         </div>
+        {treeId && <GradeSelector selectedGrade={passingGrade} onSelect={setPassingGrade} />}
       </div>
       <div style={{ width: panelLayout === 'sidebar' && selectedNodeId ? 'calc(100% - 400px)' : '100%', height: '100%', transition: 'width 0.3s ease' }}>
         <ReactFlow
@@ -477,6 +481,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
             setTutorHistories={setTutorHistories}
             examinerAssessments={examinerAssessments}
             setExaminerAssessments={setExaminerAssessments}
+            passingGrade={passingGrade}
           />
         </div>
       )}

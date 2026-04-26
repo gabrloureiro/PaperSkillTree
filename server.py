@@ -4,7 +4,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from src.core.config import Config
 from src.services.storage_service import StorageService
@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     tree_id: str
     message: str
     chat_history: List[Dict[str, str]]
+    passing_grade: str = "B-"
 
 app = FastAPI(title="PaperSkillTree API", version="1.1")
 
@@ -125,24 +126,50 @@ async def delete_skill_tree(tree_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-class RenameRequest(BaseModel):
-    title: str
+class UpdateMetadataRequest(BaseModel):
+    title: Optional[str] = None
+    passing_grade: Optional[str] = None
 
 @app.patch("/skill-trees/{tree_id}")
-async def rename_skill_tree(tree_id: str, req: RenameRequest):
+async def update_skill_tree_metadata(tree_id: str, req: UpdateMetadataRequest):
     try:
-        storage_service.update_skill_tree_metadata(tree_id, {"title": req.title})
-        return {"status": "success", "message": f"Skill tree {tree_id} renamed to {req.title}"}
+        metadata = {}
+        if req.title is not None:
+            metadata["title"] = req.title
+        if req.passing_grade is not None:
+            metadata["passing_grade"] = req.passing_grade
+            
+        storage_service.update_skill_tree_metadata(tree_id, metadata)
+        return {"status": "success", "message": f"Metadata for {tree_id} updated"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/examiner")
 async def chat_examiner(req: ChatRequest):
     try:
-        result = await chat_service.chat_examiner(req.tree_id, req.node_id, req.message, req.chat_history)
+        result = await chat_service.chat_examiner(req.tree_id, req.node_id, req.message, req.chat_history, req.passing_grade)
         return result
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/skill-trees/{tree_id}/reset")
+async def reset_skill_tree_progress(tree_id: str):
+    try:
+        data = storage_service.load_skill_tree(tree_id)
+        if data:
+            if "skill_tree_nodes" in data:
+                for node in data["skill_tree_nodes"]:
+                    node["completed"] = False
+            
+            if "metadata" in data:
+                data["metadata"].pop("passing_grade", None)
+                
+            storage_service.save_skill_tree(tree_id, data)
+            return {"status": "success", "message": f"Progress reset for {tree_id}"}
+        else:
+            raise HTTPException(status_code=404, detail="Skill tree not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

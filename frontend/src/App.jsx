@@ -5,6 +5,8 @@ import NodeSidePanel from './components/NodeSidePanel';
 import { Network } from 'lucide-react';
 import './App.css';
 
+const API_URL = 'http://localhost:8000';
+
 function App() {
   const [skillTrees, setSkillTrees] = useState([]);
   const [selectedTreeId, setSelectedTreeId] = useState(null);
@@ -16,14 +18,38 @@ function App() {
   const [panelLayout, setPanelLayout] = useState('right'); // sidebar, top, right, bottom
   const [tutorHistories, setTutorHistories] = useState({});
   const [examinerAssessments, setExaminerAssessments] = useState({});
-  const [completedNodes, setCompletedNodes] = useState(() => {
-    const saved = localStorage.getItem('completedNodes');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [completedNodes, setCompletedNodes] = useState([]);
+  const [passingGrade, setPassingGrade] = useState({}); // { [treeId]: grade }
+
+  useEffect(() => {
+    const savedCompleted = localStorage.getItem('completedNodes');
+    if (savedCompleted) setCompletedNodes(JSON.parse(savedCompleted));
+    
+    const savedTutor = localStorage.getItem('tutorHistories');
+    if (savedTutor) setTutorHistories(JSON.parse(savedTutor));
+    
+    const savedExaminer = localStorage.getItem('examinerAssessments');
+    if (savedExaminer) setExaminerAssessments(JSON.parse(savedExaminer));
+    
+    const savedPassing = localStorage.getItem('passingGrades');
+    if (savedPassing) setPassingGrade(JSON.parse(savedPassing));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('completedNodes', JSON.stringify(completedNodes));
   }, [completedNodes]);
+
+  useEffect(() => {
+    localStorage.setItem('tutorHistories', JSON.stringify(tutorHistories));
+  }, [tutorHistories]);
+
+  useEffect(() => {
+    localStorage.setItem('examinerAssessments', JSON.stringify(examinerAssessments));
+  }, [examinerAssessments]);
+
+  useEffect(() => {
+    localStorage.setItem('passingGrades', JSON.stringify(passingGrade));
+  }, [passingGrade]);
 
   const markNodeCompleted = useCallback((nodeId) => {
     setCompletedNodes(prev => {
@@ -39,14 +65,49 @@ function App() {
     });
   }, []);
 
-  const resetProgress = useCallback(() => {
-    setCompletedNodes([]);
-    localStorage.removeItem('completedNodes');
-  }, []);
+  const resetProgress = useCallback(async () => {
+    if (!selectedTreeId) return;
+    if (window.confirm("Are you sure you want to reset all progress for this paper? This will clear all completed nodes, chat histories, and reset the passing grade.")) {
+      try {
+        await fetch(`${API_URL}/skill-trees/${selectedTreeId}/reset`, {
+          method: 'POST'
+        });
+        
+        setCompletedNodes([]);
+        
+        setTutorHistories(prev => {
+          const next = { ...prev };
+          if (treeData?.skill_tree_nodes) {
+            treeData.skill_tree_nodes.forEach(node => {
+              delete next[node.node_id];
+            });
+          }
+          return next;
+        });
+
+        setExaminerAssessments(prev => {
+          const next = { ...prev };
+          if (treeData?.skill_tree_nodes) {
+            treeData.skill_tree_nodes.forEach(node => {
+              delete next[node.node_id];
+            });
+          }
+          return next;
+        });
+
+        setPassingGrade(prev => ({ ...prev, [selectedTreeId]: "B-" }));
+        
+        localStorage.removeItem('completedNodes');
+      } catch (err) {
+        console.error("Failed to reset progress on backend:", err);
+        setError("Failed to reset progress on the server.");
+      }
+    }
+  }, [selectedTreeId, treeData]);
 
   const fetchSkillTrees = async () => {
     try {
-      const res = await fetch('http://localhost:8000/skill-trees');
+      const res = await fetch(`${API_URL}/skill-trees`);
       if (!res.ok) throw new Error('Failed to fetch skill trees');
       const data = await res.json();
       setSkillTrees(data.skill_trees || []);
@@ -65,11 +126,29 @@ function App() {
     setError(null);
     setSelectedNode(null);
     try {
-      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`);
+      const res = await fetch(`${API_URL}/skill-trees/${treeId}`);
       if (!res.ok) throw new Error('Failed to load skill tree');
       const data = await res.json();
-      setTreeData(data.tree_data);
+      const loadedTreeData = data.tree_data;
+      setTreeData(loadedTreeData);
       setSelectedTreeId(treeId);
+      
+      // Pull passing grade from backend if available
+      if (loadedTreeData.metadata?.passing_grade) {
+        setPassingGrade(prev => ({ ...prev, [treeId]: loadedTreeData.metadata.passing_grade }));
+      }
+      
+      // Sync completed nodes from backend
+      if (loadedTreeData.skill_tree_nodes) {
+        const backendCompleted = loadedTreeData.skill_tree_nodes
+          .filter(n => n.completed)
+          .map(n => n.node_id);
+        
+        setCompletedNodes(prev => {
+          const combined = new Set([...prev, ...backendCompleted]);
+          return Array.from(combined);
+        });
+      }
     } catch (err) {
       console.error(err);
       setError('Failed to load the selected skill tree.');
@@ -86,16 +165,35 @@ function App() {
       const formData = new FormData();
       formData.append('file', file);
       
-      const res = await fetch('http://localhost:8000/upload', {
+      const res = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
       
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();
+      const loadedTreeData = data.tree_data;
       
-      setTreeData(data.tree_data);
-      setSelectedTreeId('recent_upload'); // temporary ID
+      setTreeData(loadedTreeData);
+      setSelectedTreeId(data.tree_id || 'recent_upload'); 
+      
+      // Pull passing grade from backend if available
+      if (loadedTreeData.metadata?.passing_grade) {
+        setPassingGrade(prev => ({ ...prev, [data.tree_id]: loadedTreeData.metadata.passing_grade }));
+      }
+
+      // Sync completed nodes from backend
+      if (loadedTreeData.skill_tree_nodes) {
+        const backendCompleted = loadedTreeData.skill_tree_nodes
+          .filter(n => n.completed)
+          .map(n => n.node_id);
+        
+        setCompletedNodes(prev => {
+          const combined = new Set([...prev, ...backendCompleted]);
+          return Array.from(combined);
+        });
+      }
+      
       fetchSkillTrees(); // Refresh list
     } catch (err) {
       console.error(err);
@@ -111,7 +209,7 @@ function App() {
 
   const handleRenameTree = async (treeId, newTitle) => {
     try {
-      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+      const res = await fetch(`${API_URL}/skill-trees/${treeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle }),
@@ -127,7 +225,7 @@ function App() {
   const handleDeleteTree = async (treeId) => {
     if (!window.confirm('Are you sure you want to delete this paper?')) return;
     try {
-      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+      const res = await fetch(`${API_URL}/skill-trees/${treeId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete skill tree');
@@ -216,6 +314,20 @@ function App() {
             setTutorHistories={setTutorHistories}
             examinerAssessments={examinerAssessments}
             setExaminerAssessments={setExaminerAssessments}
+            passingGrade={passingGrade[selectedTreeId] || "B-"}
+            setPassingGrade={async (grade) => {
+              setPassingGrade(prev => ({ ...prev, [selectedTreeId]: grade }));
+              // Sync with backend
+              try {
+                await fetch(`${API_URL}/skill-trees/${selectedTreeId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ passing_grade: grade }),
+                });
+              } catch (error) {
+                console.error("Failed to sync passing grade to backend:", error);
+              }
+            }}
           />
         )}
       </main>

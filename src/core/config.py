@@ -11,3 +11,4 @@ class Config:
     PDF_CACHE_DIR = os.path.join(CACHE_DIR, "pdfs")
     SKILL_TREE_CACHE_DIR = os.path.join(CACHE_DIR, "skill_trees")
     ALLOWED_ORIGINS = ["http://localhost:5173"]
+    DEFAULT_PASSING_GRADE = "B-"

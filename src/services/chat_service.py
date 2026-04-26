@@ -32,15 +32,29 @@ class ChatService:
                 
         return node, raw_text_chunk
 
-    async def chat_examiner(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
+    async def chat_examiner(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]], passing_grade: str = "B-"):
         node, raw_text = self.get_node_context(tree_id, node_id)
-        return await self.examiner.interact(
+        result = await self.examiner.interact(
             concept_name=node.get("concept_name", node_id),
             explanation=node.get("explanation", ""),
             raw_text=raw_text,
             message=message,
-            chat_history=chat_history
+            chat_history=chat_history,
+            passing_grade=passing_grade
         )
+        
+        if result.get("passed"):
+            tree_data = self.storage_service.load_skill_tree(tree_id)
+            if tree_data:
+                nodes = tree_data.get("skill_tree_nodes", [])
+                for n in nodes:
+                    if n["node_id"] == node_id:
+                        n["completed"] = True
+                        n["letter_grade"] = result.get("letter_grade")
+                        break
+                self.storage_service.save_skill_tree(tree_id, tree_data)
+        
+        return result
 
     async def chat_tutor(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
         node, raw_text = self.get_node_context(tree_id, node_id)

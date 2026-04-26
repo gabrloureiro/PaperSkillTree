@@ -108,7 +108,7 @@ const Sidebar = ({ skillTrees, onSelectTree, onUpload, onDeleteTree, onRenameTre
                     </button>
                     <div className="tree-item-actions">
                       <button onClick={(e) => startEditing(e, tree)} className="icon-btn edit" title="Rename"><Edit2 size={14} /></button>
-                      <button onClick={(e) => handleDelete(e, tree.id)} className="icon-btn delete" title="Delete"><Trash2 size={14} /></button>
+                      <button onClick={(e) => handleDelete(e, treeId)} className="icon-btn delete" title="Delete"><Trash2 size={14} /></button>
                     </div>
                   </div>
                 )}

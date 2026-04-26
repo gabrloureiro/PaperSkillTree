@@ -1,0 +1,211 @@
+.grade-selector-container {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.grade-selector-header {
+  display: none; /* Hide header in main section for compactness */
+}
+
+.grade-icon {
+  color: var(--accent-color);
+}
+
+.grade-trigger-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.grade-trigger-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.grade-value-preview {
+  font-size: 1.1rem;
+  font-weight: 800;
+  min-width: 24px;
+}
+
+.grade-trigger-text {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chevron {
+  color: var(--text-secondary);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.grade-modal {
+  width: 100%;
+  max-width: 800px; /* Wider as requested */
+  max-height: 85vh;
+  background: rgba(15, 17, 21, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-title h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.close-modal-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  display: flex;
+}
+
+.close-modal-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.modal-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Card Item inside Modal - Glassy Gradient Style */
+.grade-card-item {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 32px; /* Shorter cards */
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  min-height: 90px; /* Shorter as requested */
+}
+
+.grade-card-item:hover {
+  transform: translateY(-2px) scale(1.01);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.grade-card-item.selected {
+  border-color: currentColor;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.05);
+}
+
+.card-letter-large {
+  font-size: 2.8rem;
+  font-weight: 950;
+  min-width: 70px;
+  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+.card-info {
+  flex: 1;
+}
+
+.card-desc-text {
+  font-size: 1rem;
+  color: var(--text-primary);
+  opacity: 0.9;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.card-check-icon {
+  color: inherit;
+  opacity: 0.9;
+}
+
+/* Glassy Gradient backgrounds for modal cards */
+.grade-card-item.grade-a { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.03)); color: #10b981; }
+.grade-card-item.grade-a.selected { background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.08)); border-color: rgba(16, 185, 129, 0.5); }
+
+.grade-card-item.grade-b { background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.03)); color: #3b82f6; }
+.grade-card-item.grade-b.selected { background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.08)); border-color: rgba(59, 130, 246, 0.5); }
+
+.grade-card-item.grade-c { background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.03)); color: #f59e0b; }
+.grade-card-item.grade-c.selected { background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(245, 158, 11, 0.08)); border-color: rgba(245, 158, 11, 0.5); }
+
+.grade-card-item.grade-d { background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.03)); color: #ef4444; }
+.grade-card-item.grade-d.selected { background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(239, 68, 68, 0.08)); border-color: rgba(239, 68, 68, 0.5); }
+
+.grade-card-item.grade-f { background: linear-gradient(135deg, rgba(148, 163, 184, 0.15), rgba(148, 163, 184, 0.03)); color: #94a3b8; }
+
+.grade-description-preview {
+  display: none; /* Hide preview for compactness */
+}
+
+/* Animations */
+@keyframes scaleIn {
+  from { transform: scale(0.97); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Modal scrollbar */
+.modal-scroll-area::-webkit-scrollbar { width: 6px; }
+.modal-scroll-area::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }

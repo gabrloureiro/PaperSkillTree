@@ -4,13 +4,13 @@ from src.agents.base_agent import BaseAgent
 from src.models.schemas import ExaminerResponseModel, TutorResponseModel
 
 class ExaminerAgent(BaseAgent):
-    async def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
+    async def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]], passing_grade: str = "B-") -> Dict[str, Any]:
         system_instruction = self.llm_service.get_system_instruction("Examiner", ExaminerResponseModel)
         system_instruction += (
             "\nYou are a strict and thorough examiner. The user is trying to explain the concept. "
             "Assess if their explanation is accurate based on the Grounded Explanation. "
             "Grade the user's explanation on an A-F scale and provide it in `letter_grade`. "
-            "If they pass (grade B- or higher), set `passed` to true. If they fail (grade C+ or lower), set `passed` to false. "
+            f"If they pass (grade {passing_grade} or higher), set `passed` to true. If they fail, set `passed` to false. "
             "Keep your response to a maximum of 3 sentences."
         )
         
