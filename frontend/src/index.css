@@ -1,0 +1,264 @@
+:root {
+  --bg-dark: #0f1115;
+  --bg-panel: rgba(25, 28, 35, 0.6);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --text-primary: #f0f0f5;
+  --text-secondary: #9aa0a6;
+  --accent-color: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-glow: rgba(99, 102, 241, 0.3);
+  --node-bg: #1e222a;
+  --node-border: #2d333f;
+  --node-text: #e2e8f0;
+  
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden; /* App should fit screen */
+  background: radial-gradient(circle at 50% 0%, #1e1e24 0%, var(--bg-dark) 80%);
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Node styles */
+.react-flow__node-customNode {
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 150px;
+  color: var(--node-text);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.react-flow__node-customNode:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 15px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.custom-node.is-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-color), 0 0 25px var(--accent-glow);
+}
+
+.react-flow__handle {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Custom Node Styles */
+.custom-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--node-bg);
+  border: 2px solid var(--node-border);
+  color: var(--node-text);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.custom-node .icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Layout Dropdown Custom Styles */
+.layout-dropdown-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.layout-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 8px 36px 8px 16px;
+  background: rgba(15, 17, 21, 0.85);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.layout-select:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(25, 28, 35, 0.95);
+}
+
+.layout-select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2), 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dropdown-icon {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: var(--text-secondary);
+}
+
+.layout-select option {
+  background: var(--bg-main);
+  color: var(--text-primary);
+  padding: 12px;
+}
+
+.custom-node.completed {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgb(16, 185, 129);
+  color: rgb(16, 185, 129);
+}
+
+.custom-node.unlocked {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgb(59, 130, 246);
+  color: rgb(59, 130, 246);
+}
+
+.custom-node.locked {
+  background: rgba(156, 163, 175, 0.1);
+  border-color: rgba(156, 163, 175, 0.3);
+  color: var(--text-secondary);
+}
+
+.custom-node:hover {
+  box-shadow: 0 0 25px var(--accent-glow);
+}
+
+.label-container {
+  position: absolute;
+  bottom: -30px;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: rgba(15, 17, 21, 0.8);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+}
+
+.custom-node.hover-mode .label-container {
+  opacity: 0;
+}
+
+.custom-node.hover-mode:hover .label-container {
+  opacity: 1;
+}
+
+.react-flow__edge-path {
+  stroke: var(--text-secondary);
+  stroke-width: 2;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* UI Components */
+.btn-primary {
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Custom React Flow Controls */
+.custom-controls button {
+  background-color: var(--bg-panel) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.custom-controls button svg {
+  fill: var(--text-primary) !important;
+}
+
+.custom-controls button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}

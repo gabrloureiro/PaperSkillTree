@@ -1,0 +1,8 @@
+pydantic
+google-genai
+langgraph
+pymupdf
+unstructured
+fastapi
+uvicorn
+python-multipart

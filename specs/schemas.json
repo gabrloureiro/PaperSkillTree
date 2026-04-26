@@ -1,0 +1,192 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "definitions": {
+        "PaperChunkInput": {
+            "type": "object",
+            "required": [
+                "raw_text",
+                "section_header"
+            ],
+            "properties": {
+                "raw_text": {
+                    "type": "string",
+                    "minLength": 50
+                },
+                "section_header": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "ExpertInput": {
+            "type": "object",
+            "required": [
+                "node_id",
+                "concept_name",
+                "relevant_raw_text"
+            ],
+            "properties": {
+                "node_id": {
+                    "type": "string"
+                },
+                "concept_name": {
+                    "type": "string"
+                },
+                "relevant_raw_text": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "ValidatorInput": {
+            "type": "object",
+            "required": [
+                "draft_explanation",
+                "source_raw_text"
+            ],
+            "properties": {
+                "draft_explanation": {
+                    "type": "string"
+                },
+                "source_raw_text": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "SynthesizerInput": {
+            "type": "object",
+            "required": [
+                "validated_nodes"
+            ],
+            "properties": {
+                "validated_nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ExpertOutput"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "CartographerOutput": {
+            "type": "object",
+            "required": [
+                "nodes"
+            ],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "node_id",
+                            "concept_name",
+                            "icon_name",
+                            "source_section_header"
+                        ],
+                        "properties": {
+                            "node_id": {
+                                "type": "string"
+                            },
+                            "concept_name": {
+                                "type": "string"
+                            },
+                            "icon_name": {
+                                "type": "string"
+                            },
+                            "source_section_header": {
+                                "type": "string"
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "ExpertOutput": {
+            "type": "object",
+            "required": [
+                "node_id",
+                "explanation",
+                "prerequisite_node_ids"
+            ],
+            "properties": {
+                "node_id": {
+                    "type": "string"
+                },
+                "explanation": {
+                    "type": "string"
+                },
+                "prerequisite_node_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "ValidatorOutput": {
+            "type": "object",
+            "required": [
+                "is_valid",
+                "hallucination_flags"
+            ],
+            "properties": {
+                "is_valid": {
+                    "type": "boolean"
+                },
+                "hallucination_flags": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "claim",
+                            "issue_description"
+                        ],
+                        "properties": {
+                            "claim": {
+                                "type": "string"
+                            },
+                            "issue_description": {
+                                "type": "string"
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "SynthesizerOutput": {
+            "type": "object",
+            "required": [
+                "directed_acyclic_graph"
+            ],
+            "properties": {
+                "directed_acyclic_graph": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "source",
+                            "target"
+                        ],
+                        "properties": {
+                            "source": {
+                                "type": "string"
+                            },
+                            "target": {
+                                "type": "string"
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}
