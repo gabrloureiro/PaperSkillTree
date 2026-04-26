@@ -61,24 +61,19 @@ body {
 }
 
 /* Node styles */
-.react-flow__node-customNode {
-  background: var(--node-bg);
-  border: 1px solid var(--node-border);
-  border-radius: 8px;
-  padding: 12px;
-  min-width: 150px;
-  color: var(--node-text);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s ease-in-out;
+.react-flow__node-custom {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
-.react-flow__node-customNode:hover {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 15px var(--accent-glow);
-  transform: translateY(-2px);
+.react-flow__node-custom:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }
 
-.custom-node.is-selected {
+.react-flow__node-custom.selected .custom-node {
   border-color: var(--accent-color);
   box-shadow: 0 0 0 2px var(--accent-color), 0 0 25px var(--accent-glow);
 }
@@ -111,6 +106,11 @@ body {
   justify-content: center;
   width: 100%;
   height: 100%;
+}
+
+.custom-node.is-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-color), 0 0 25px var(--accent-glow);
 }
 
 /* Layout Dropdown Custom Styles */

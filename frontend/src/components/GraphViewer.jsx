@@ -99,7 +99,7 @@ const CustomNode = ({ data, selected }) => {
   );
 };
 
-const nodeWidth = 200;
+const nodeWidth = 60;
 const nodeHeight = 60;
 
 const assignDynamicWeights = (nodes, edges) => {
@@ -167,7 +167,14 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
   
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, ranker: 'longest-path' });
+  dagreGraph.setGraph({ 
+    rankdir: direction, 
+    ranker: 'longest-path',
+    nodesep: 100,
+    ranksep: 160,
+    marginx: 50,
+    marginy: 50
+  });
 
   nodes.forEach((node) => dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }));
   weightedEdges.forEach((edge) => {
@@ -185,13 +192,38 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
       position: { x: nodeWithPosition.x - nodeWidth / 2, y: nodeWithPosition.y - nodeHeight / 2 },
     };
   });
-
   const layoutedEdges = weightedEdges.map((edge) => {
     const edgeWithPosition = dagreGraph.edge(edge.source, edge.target);
+    let points = [...edgeWithPosition.points];
+    
+    // Add a small visual gap (offset) between the node and the edge start/end
+    const gap = 10;
+    if (points.length >= 2) {
+      // Shorten the start of the edge
+      const p0 = points[0];
+      const p1 = points[1];
+      const dx0 = p1.x - p0.x;
+      const dy0 = p1.y - p0.y;
+      const len0 = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+      if (len0 > gap) {
+        points[0] = { x: p0.x + (dx0 / len0) * gap, y: p0.y + (dy0 / len0) * gap };
+      }
+
+      // Shorten the end of the edge
+      const pn = points[points.length - 1];
+      const pn_1 = points[points.length - 2];
+      const dxn = pn_1.x - pn.x;
+      const dyn = pn_1.y - pn.y;
+      const lenn = Math.sqrt(dxn * dxn + dyn * dyn);
+      if (lenn > gap) {
+        points[points.length - 1] = { x: pn.x + (dxn / lenn) * gap, y: pn.y + (dyn / lenn) * gap };
+      }
+    }
+
     return {
       ...edge,
       type: 'dagre',
-      data: { ...edge.data, points: edgeWithPosition.points },
+      data: { ...edge.data, points },
     };
   });
 
