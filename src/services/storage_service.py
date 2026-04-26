@@ -40,7 +40,41 @@ class StorageService:
                 return json.load(f)
         return None
 
-    def list_skill_trees(self) -> List[str]:
+    def delete_skill_tree(self, tree_id: str):
+        # Delete JSON
+        json_path = os.path.join(self.tree_dir, f"{tree_id}.json")
+        if os.path.exists(json_path):
+            os.remove(json_path)
+        
+        # Delete PDF
+        pdf_path = os.path.join(self.pdf_dir, f"{tree_id}.pdf")
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+    def update_skill_tree_metadata(self, tree_id: str, metadata: Dict[str, Any]):
+        data = self.load_skill_tree(tree_id)
+        if data:
+            if "metadata" not in data:
+                data["metadata"] = {}
+            data["metadata"].update(metadata)
+            self.save_skill_tree(tree_id, data)
+
+    def list_skill_trees(self) -> List[Dict[str, str]]:
         if not os.path.exists(self.tree_dir):
             return []
-        return [f.replace(".json", "") for f in os.listdir(self.tree_dir) if f.endswith(".json")]
+        
+        trees = []
+        for filename in os.listdir(self.tree_dir):
+            if filename.endswith(".json"):
+                tree_id = filename.replace(".json", "")
+                data = self.load_skill_tree(tree_id)
+                title = tree_id[:12] + "..."
+                if data and "metadata" in data and "title" in data["metadata"]:
+                    title = data["metadata"]["title"]
+                elif data and "raw_text" in data and len(data["raw_text"]) > 0:
+                    # Fallback to first chunk if no title in metadata
+                    title = data["raw_text"][0].get("raw_text", tree_id)[:50]
+                
+                trees.append({"id": tree_id, "title": title})
+        
+        return sorted(trees, key=lambda x: x["title"])

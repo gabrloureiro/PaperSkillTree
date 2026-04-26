@@ -12,6 +12,8 @@ class CartographerOutputModel(BaseModel):
 
 class ExpertOutputModel(BaseModel):
     node_id: str
+    concept_name: str
+    icon_name: str
     explanation: str
     prerequisite_node_ids: List[str]
 

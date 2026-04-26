@@ -91,7 +91,10 @@ function App() {
         body: formData,
       });
       
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Upload failed');
+      }
       const data = await res.json();
       
       setTreeData(data.tree_data);
@@ -99,9 +102,45 @@ function App() {
       fetchSkillTrees(); // Refresh list
     } catch (err) {
       console.error(err);
-      setError('Failed to upload and process PDF.');
+      setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const handleDeleteTree = async (treeId) => {
+    if (!window.confirm("Are you sure you want to delete this paper?")) return;
+    
+    try {
+      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete skill tree');
+      
+      if (selectedTreeId === treeId) {
+        setTreeData(null);
+        setSelectedTreeId(null);
+        setSelectedNode(null);
+      }
+      fetchSkillTrees();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to delete the paper.');
+    }
+  };
+
+  const handleRenameTree = async (treeId, newTitle) => {
+    try {
+      const res = await fetch(`http://localhost:8000/skill-trees/${treeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle })
+      });
+      if (!res.ok) throw new Error('Failed to rename skill tree');
+      fetchSkillTrees();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to rename the paper.');
     }
   };
 
@@ -125,6 +164,8 @@ function App() {
         skillTrees={skillTrees} 
         onSelectTree={loadSkillTree}
         onUpload={handleUpload}
+        onDeleteTree={handleDeleteTree}
+        onRenameTree={handleRenameTree}
         selectedTreeId={selectedTreeId}
         isLoading={isLoading}
       />

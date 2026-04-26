@@ -4,7 +4,7 @@ from src.agents.base_agent import BaseAgent
 from src.models.schemas import ExaminerResponseModel, TutorResponseModel
 
 class ExaminerAgent(BaseAgent):
-    def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
+    async def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
         system_instruction = self.llm_service.get_system_instruction("Examiner", ExaminerResponseModel)
         system_instruction += (
             "\nYou are a strict and thorough examiner. The user is trying to explain the concept. "
@@ -21,15 +21,15 @@ class ExaminerAgent(BaseAgent):
             f"User Message:\n{message}"
         )
         
-        result = self.llm_service.generate_json(system_instruction, prompt, ExaminerResponseModel)
+        result = await self.llm_service.generate_json(system_instruction, prompt, ExaminerResponseModel)
         
         if raw_text:
-            result["response"] = self._audit_response(result["response"], raw_text)
+            result["response"] = await self._audit_response(result["response"], raw_text)
         
         return result
 
 class TutorAgent(BaseAgent):
-    def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
+    async def interact(self, concept_name: str, explanation: str, raw_text: str, message: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
         system_instruction = self.llm_service.get_system_instruction("Tutor", TutorResponseModel)
         system_instruction += (
             "\nYou are a direct and helpful tutor. Clarify the user's confusions about the concept based on the Grounded Explanation. "
@@ -43,9 +43,9 @@ class TutorAgent(BaseAgent):
             f"User Message:\n{message}"
         )
         
-        result = self.llm_service.generate_json(system_instruction, prompt, TutorResponseModel)
+        result = await self.llm_service.generate_json(system_instruction, prompt, TutorResponseModel)
         
         if raw_text:
-            result["response"] = self._audit_response(result["response"], raw_text)
+            result["response"] = await self._audit_response(result["response"], raw_text)
         
         return result

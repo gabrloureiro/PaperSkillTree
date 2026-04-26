@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+import json
 from src.services.ingestion_service import PDFIngester
 from src.core.graph_builder import GraphBuilder
 from src.models.state import PaperChunkInput
@@ -15,32 +16,103 @@ class GraphService:
             self._graph = self.graph_builder.build()
         return self._graph
 
-    def process_paper(self, pdf_path: str) -> Dict[str, Any]:
-        # 1. Parse PDF
+    async def _get_title(self, chunks: List[Dict[str, Any]]) -> str:
+        title = "Untitled Paper"
+        for chunk in chunks[:3]:
+            if chunk.get("section_header") == "Title" or chunk.get("section_header") == "Article":
+                title = chunk.get("raw_text", "").split('\n')[0][:100]
+                break
+        if title == "Untitled Paper" and chunks:
+            title = chunks[0].get("raw_text", "").split('\n')[0][:100]
+        return title
+
+    async def process_paper(self, pdf_path: str) -> Dict[str, Any]:
         chunks = self.ingester.parse_pdf(pdf_path)
-        
-        # 2. Initialize State
         initial_state = {
             "raw_text": chunks,
             "skill_tree_nodes": [],
-            "current_node_under_review": None,
-            "current_raw_text_under_review": "",
-            "draft_analysis": None,
-            "critique_feedback": None,
-            "validation_status": False,
             "unprocessed_nodes": [],
-            "revision_count": 0,
             "final_dag": None
         }
+        final_state = await self.graph.ainvoke(initial_state)
         
-        # 3. Run Graph
-        final_state = self.graph.invoke(initial_state)
+        # --- MANUAL SYNTHESIS STEP ---
+        skill_tree_nodes = final_state.get("skill_tree_nodes", [])
+        final_dag = {}
+        if skill_tree_nodes:
+            synthesis_output = await self.graph_builder.agents.synthesizer({"skill_tree_nodes": skill_tree_nodes})
+            final_dag = synthesis_output.get("final_dag", {})
         
-        # 4. Extract Results
-        final_dag = final_state.get("final_dag") or {}
+        title = await self._get_title(chunks)
+
         return {
             "directed_acyclic_graph": final_dag.get("directed_acyclic_graph", []),
-            "skill_tree_nodes": final_state.get("skill_tree_nodes", []),
+            "skill_tree_nodes": skill_tree_nodes,
             "raw_text": final_state.get("raw_text", []),
-            "unprocessed_nodes": final_state.get("unprocessed_nodes", [])
+            "unprocessed_nodes": final_state.get("unprocessed_nodes", []),
+            "metadata": {
+                "title": title
+            }
         }
+
+    async def process_paper_stream(self, pdf_path: str):
+        """
+        Streams graph execution events for real-time visualization.
+        """
+        chunks = self.ingester.parse_pdf(pdf_path)
+        initial_state = {
+            "raw_text": chunks,
+            "skill_tree_nodes": [],
+            "unprocessed_nodes": [],
+            "final_dag": None
+        }
+
+        last_state = initial_state
+        async for event in self.graph.astream_events(initial_state, version="v2"):
+            kind = event["event"]
+            if kind == "on_chain_start":
+                node_name = event.get("metadata", {}).get("langgraph_node")
+                if node_name:
+                    yield {"type": "node_start", "node": node_name}
+                elif event["name"] == "LangGraph":
+                    yield {"type": "status", "content": "Initializing pipeline..."}
+            
+            elif kind == "on_chain_end":
+                node_name = event.get("metadata", {}).get("langgraph_node")
+                if node_name:
+                    output = event.get("data", {}).get("output")
+                    yield {
+                        "type": "node_end", 
+                        "node": node_name, 
+                        "output": output
+                    }
+                elif event["name"] == "LangGraph":
+                    last_state = event.get("data", {}).get("output")
+                    yield {"type": "status", "content": "Concept extraction finished."}
+
+        # --- FINAL SYNTHESIS EVENT ---
+        yield {"type": "status", "content": "Synthesizing final skill tree..."}
+        skill_tree_nodes = last_state.get("skill_tree_nodes", [])
+        final_dag = {}
+        if skill_tree_nodes:
+            synthesis_output = await self.graph_builder.agents.synthesizer({"skill_tree_nodes": skill_tree_nodes})
+            final_dag = synthesis_output.get("final_dag", {})
+            yield {
+                "type": "node_end",
+                "node": "synthesizer",
+                "output": {"final_dag": final_dag}
+            }
+        
+        title = await self._get_title(chunks)
+        final_result = {
+            "directed_acyclic_graph": final_dag.get("directed_acyclic_graph", []),
+            "skill_tree_nodes": skill_tree_nodes,
+            "raw_text": last_state.get("raw_text", []),
+            "unprocessed_nodes": last_state.get("unprocessed_nodes", []),
+            "metadata": {
+                "title": title
+            }
+        }
+        
+        yield {"type": "final_result", "data": final_result}
+        yield {"type": "status", "content": "Pipeline finished."}

@@ -8,7 +8,7 @@ class BaseAgent:
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
 
-    def _audit_response(self, draft_response: str, raw_text: str) -> str:
+    async def _audit_response(self, draft_response: str, raw_text: str) -> str:
         """Audits a draft response against raw text, and rewrites it if hallucinations are found."""
         # 1. Validation
         validator_prompt = (
@@ -23,7 +23,7 @@ class BaseAgent:
             "about factual grounding."
         )
         
-        validation_result = self.llm_service.generate_json(validator_system, validator_prompt, ValidatorOutputModel)
+        validation_result = await self.llm_service.generate_json(validator_system, validator_prompt, ValidatorOutputModel)
         
         if validation_result.get("is_valid", False):
             return draft_response
@@ -37,6 +37,6 @@ class BaseAgent:
             f"Source Text:\n{raw_text}"
         )
         resolution_system = self.llm_service.get_system_instruction("Resolution", AuditedResponseModel)
-        resolution_result = self.llm_service.generate_json(resolution_system, resolution_prompt, AuditedResponseModel)
+        resolution_result = await self.llm_service.generate_json(resolution_system, resolution_prompt, AuditedResponseModel)
         
         return resolution_result.get("response", draft_response)

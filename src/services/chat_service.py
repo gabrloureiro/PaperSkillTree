@@ -32,9 +32,9 @@ class ChatService:
                 
         return node, raw_text_chunk
 
-    def chat_examiner(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
+    async def chat_examiner(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
         node, raw_text = self.get_node_context(tree_id, node_id)
-        return self.examiner.interact(
+        return await self.examiner.interact(
             concept_name=node.get("concept_name", node_id),
             explanation=node.get("explanation", ""),
             raw_text=raw_text,
@@ -42,9 +42,9 @@ class ChatService:
             chat_history=chat_history
         )
 
-    def chat_tutor(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
+    async def chat_tutor(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
         node, raw_text = self.get_node_context(tree_id, node_id)
-        return self.tutor.interact(
+        return await self.tutor.interact(
             concept_name=node.get("concept_name", node_id),
             explanation=node.get("explanation", ""),
             raw_text=raw_text,
