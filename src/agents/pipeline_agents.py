@@ -4,7 +4,10 @@ from src.services.llm_service import LLMService
 from src.models.schemas import (
     CartographerOutputModel, ExpertOutputModel, 
     ValidatorOutputModel, SynthesizerOutputModel,
-    StructuralAuditorOutputModel
+    StructuralAuditorOutputModel, RecruiterOutputModel,
+    CouncilDesignOutputModel, CouncilReviewOutputModel,
+    NodeEvaluatorRubricsModel, EvaluatorRubricModel,
+    CouncilMemberResponseModel, CouncilAuditModel
 )
 from src.models.state import PaperState, BranchState
 
@@ -12,15 +15,179 @@ class PipelineAgents:
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
 
-    async def cartographer(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        system_instruction = self.llm_service.get_system_instruction("Cartographer", CartographerOutputModel)
+    async def recruiter(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        system_instruction = self.llm_service.get_system_instruction("Recruiter", RecruiterOutputModel)
         system_instruction += (
-            "\n\nTHOROUGHNESS & FLOW DIRECTIVE:\n"
-            "Your goal is to create an exhaustive map of the paper's knowledge. "
-            "Do not skip technical nuances, specific algorithms, or niche terminology. "
-            "A thorough map should contain a dense collection of interconnected concepts, but no node should have too many (more than 3) prerequisites. "
+            "\n\nROLE:\n"
+            "You are the organizer of a teaching council for an important lecture series. Your task is to analyze the provided research paper "
+            "and determine its primary field of study. Then, you must identify a set of specialist expert roles (e.g., 'Quantum Physicist', "
+            "'Machine Learning Researcher', 'Linguistic Philosopher') who are best suited to discuss and teach the concepts in this paper."
+        )
+        prompt = (
+            "Analyze the following paper text and identify the field of study and the best specialists to teach it.\n\n"
+            "Paper Text (excerpts):\n" + json.dumps([c.get("raw_text", "")[:2000] for c in state.get("raw_text", [])[:5]], indent=2)
+        )
+        result = await self.llm_service.generate_json(system_instruction, prompt, RecruiterOutputModel)
+        return {
+            "field_of_study": result.get("field_of_study"),
+            "specialists": result.get("specialists")
+        }
+
+    async def council_member(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Consolidated specialist agent that persists throughout the pipeline.
+        Tasks: Brainstorming, Plan Auditing, Final DAG Review.
+        """
+        role = state.get("current_council_role", "Expert")
+        phase = state.get("council_phase", "brainstorm")
+        history = state.get("council_chat_history", [])
+        field = state.get("field_of_study", "Academic")
+        
+        # Adjust model and instruction based on phase
+        output_model = CouncilMemberResponseModel
+        if phase == "plan_audit":
+            output_model = CouncilAuditModel
+            
+        system_instruction = self.llm_service.get_system_instruction(f"Council_{role}", output_model)
+        system_instruction += f"\n\nIDENTITY: You are the {role} member of the Teaching Council.\n"
+        
+        if phase == "brainstorm":
+            system_instruction += (
+                f"TASK: Identify must-have technical concepts, formulas, and specific details from this paper in '{field}' "
+                "that MUST be taught. Focus on FACTUAL ACCURACY and technical depth."
+            )
+            prompt = (
+                f"Share your technical requirements for the learning progression.\n\n"
+                f"Previous Discussion:\n{json.dumps(history, indent=2)}\n\n"
+                f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
+            )
+        elif phase == "plan_audit":
+            system_instruction += (
+                "TASK: Audit the Pedagogical Expert's proposed plan strictly for FACTUAL ACCURACY and COMPLETENESS.\n"
+                "Reject if it misses key formulas or misuses technical terms. Provide specific critique if rejecting."
+            )
+            prompt = (
+                f"Proposed Plan:\n{json.dumps(state.get('proposed_plan', {}), indent=2)}\n\n"
+                f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
+            )
+        else: # final_dag_review
+            system_instruction += (
+                "TASK: This is the FINAL review of the generated Skill Tree (DAG).\n"
+                "Compare the nodes and connections against the paper. Are the prerequisites technically sound?\n"
+                "Provide your final feedback."
+            )
+            prompt = (
+                f"Skill Tree Nodes:\n{json.dumps(state.get('skill_tree_nodes', []), indent=2)}\n\n"
+                f"DAG Edges:\n{json.dumps(state.get('final_dag', {}).get('directed_acyclic_graph', []), indent=2)}\n\n"
+                f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
+            )
+
+        result = await self.llm_service.generate_json(system_instruction, prompt, output_model)
+        
+        if phase == "plan_audit":
+            output = {}
+            if not result.get("is_approved"):
+                output["council_critiques"] = [f"{role}: {result.get('critique')}"]
+            return output
+        elif phase == "final_dag_review":
+            return {"final_council_review_history": [{"role": role, "message": result.get("message")}]}
+        else: # brainstorm
+            return {"council_chat_history": [{"role": role, "message": result.get("message")}]}
+
+    async def pedagogical_expert(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Consolidated lead educator agent.
+        Tasks: Plan Design/Revision, Final DAG Verdict, Rubric Generation.
+        """
+        phase = state.get("council_phase")
+        complexity = state.get("complexity", "simple")
+        
+        if phase == "rubric_generation":
+            output_model = NodeEvaluatorRubricsModel
+        elif phase == "final_dag_review":
+            output_model = CouncilReviewOutputModel
+        else: # design or revision
+            output_model = CouncilDesignOutputModel
+            
+        system_instruction = self.llm_service.get_system_instruction("PedagogicalExpert", output_model)
+        system_instruction += (
+            "\n\nIDENTITY: You are the Lead Pedagogical Expert. You synthesize technical specialist requirements "
+            "into an engaging, factual, and logically sequenced learning progression.\n"
+        )
+        
+        if phase == "rubric_generation":
+            template = state.get("council_instructions", {}).get("evaluator_template", "")
+            nodes = state.get("skill_tree_nodes", [])
+            system_instruction += (
+                f"TASK: Generate specific instructions and granular grading rubrics for each node based on the strategy.\n"
+                f"You MUST provide a rubric for every grade: A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, and F.\n"
+                f"General Template: {template}"
+            )
+            prompt = f"Nodes to process:\n" + json.dumps([{"node_id": n.get("node_id"), "concept_name": n.get("concept_name"), "explanation": n.get("explanation")} for n in nodes], indent=2)
+            result = await self.llm_service.generate_json(system_instruction, prompt, NodeEvaluatorRubricsModel)
+            return {"node_evaluator_rubrics": result.get("rubrics", {})}
+
+        elif phase == "final_dag_review":
+            system_instruction += (
+                "TASK: Make the FINAL assessment of the Skill Tree. Review specialists' feedback and ensure "
+                "the DAG meets the pedagogical goals."
+            )
+            prompt = (
+                f"Specialist Feedback:\n{json.dumps(state.get('final_council_review_history', []), indent=2)}\n\n"
+                f"Nodes:\n{json.dumps(state.get('skill_tree_nodes', []), indent=2)}\n\n"
+                f"DAG Edges:\n{json.dumps(state.get('final_dag', {}).get('directed_acyclic_graph', []), indent=2)}"
+            )
+            result = await self.llm_service.generate_json(system_instruction, prompt, CouncilReviewOutputModel)
+            return {"council_review": result}
+
+        else: # Design or Revision
+            iteration = state.get("council_iteration_count", 0)
+            system_instruction += (
+                f"TASK: Design/Revise the learning plan. Complexity: {complexity.upper()}.\n"
+                "Factual accuracy must satisfy specialists. Engagement must be high."
+            )
+            prompt = (
+                f"Discussion History:\n{json.dumps(state.get('council_chat_history', []), indent=2)}\n\n"
+                f"Previous Plan: {json.dumps(state.get('proposed_plan', {}), indent=2)}\n\n"
+                f"Unresolved Critiques: {json.dumps(state.get('council_critiques', []), indent=2)}\n\n"
+                f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
+            )
+            result = await self.llm_service.generate_json(system_instruction, prompt, CouncilDesignOutputModel)
+            return {
+                "proposed_plan": result,
+                "council_iteration_count": 1,
+                "council_critiques": []
+            }
+
+    async def council_handoff(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Final planning speaker delivers the consensus plan downstream.
+        """
+        plan = state.get("proposed_plan", {})
+        return {
+            "learning_progression_strategy": plan.get("progression_strategy"),
+            "council_instructions": {
+                "cartographer": plan.get("cartographer_instructions"),
+                "expert": plan.get("expert_instructions"),
+                "evaluator_template": plan.get("evaluator_instructions_template")
+            }
+        }
+
+    async def cartographer(self, state: Dict[str, Any]) -> Dict[str, Any]:
+
+        system_instruction = self.llm_service.get_system_instruction("Cartographer", CartographerOutputModel)
+        council_instr = state.get("council_instructions", {}).get("cartographer", "")
+        complexity = state.get("complexity", "simple")
+        
+        node_count_limit = "5 to 10 nodes at most. Keep it linear and high-level." if complexity == "simple" else "as many nodes as necessary to cover the entirety of the paper's details, including formulas and background, providing an exhaustive map."
+
+        system_instruction += (
+            f"\n\nCOUNCIL DIRECTIVES:\n{council_instr}\n\n"
+            f"THOROUGHNESS & FLOW DIRECTIVE:\n"
+            f"User Complexity Choice: {complexity.upper()}\n"
+            f"Node Count Requirement: {node_count_limit}\n"
+            f"Your goal is to create a map of the paper's knowledge based on the council's strategy. "
             "It should reflect a logical progression of the ideas. "
-            "It does not need to strictly adhere to the paper's narrative progression, but rather a logical flow of the ideas."
         )
         prompt = (
             "Analyze ALL provided text sections to extract a comprehensive list of concepts. "
@@ -38,10 +205,16 @@ class PipelineAgents:
 
     async def expert(self, state: Dict[str, Any]) -> Dict[str, Any]:
         system_instruction = self.llm_service.get_system_instruction("Expert", ExpertOutputModel)
+        council_instr = state.get("node_expert_instructions", "")
         node = state.get("current_node_under_review") or {}
         raw_text = state.get("current_raw_text_under_review") or ""
         available_nodes = state.get("available_nodes") or []
         
+        system_instruction += (
+            f"\n\nCOUNCIL DIRECTIVES:\n{council_instr}\n\n"
+            "STYLE: Engaging but factual. Do not hallucinate. Check all claims against the canonical document."
+        )
+
         # Create a mapping of node IDs to names for the LLM to reference
         node_catalog = [f"{n.get('node_id')}: {n.get('concept_name')}" for n in available_nodes]
         

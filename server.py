@@ -45,7 +45,7 @@ tutor_agent = TutorAgent(llm_service)
 chat_service = ChatService(storage_service, examiner_agent, tutor_agent)
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), complexity: str = "simple"):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
@@ -62,7 +62,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             
     try:
         # Process paper using GraphService
-        tree_data = await graph_service.process_paper(pdf_path)
+        tree_data = await graph_service.process_paper(pdf_path, complexity)
         
         # Save results
         storage_service.save_skill_tree(file_hash, tree_data)
@@ -75,7 +75,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload-stream")
-async def upload_pdf_stream(file: UploadFile = File(...)):
+async def upload_pdf_stream(file: UploadFile = File(...), complexity: str = "simple"):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
@@ -85,7 +85,7 @@ async def upload_pdf_stream(file: UploadFile = File(...)):
             
     async def event_generator():
         try:
-            async for event in graph_service.process_paper_stream(pdf_path):
+            async for event in graph_service.process_paper_stream(pdf_path, complexity):
                 if event.get("type") == "final_result":
                     storage_service.save_skill_tree(file_hash, event["data"])
                 yield f"data: {json.dumps(event)}\n\n"

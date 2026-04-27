@@ -38,6 +38,13 @@ class GraphBuilder:
         builder = StateGraph(PaperState)
         
         # Add primary nodes
+        builder.add_node("recruiter", self.agents.recruiter)
+        
+        # Council Nodes
+        builder.add_node("council_member", self.agents.council_member)
+        builder.add_node("pedagogical_expert", self.agents.pedagogical_expert)
+        builder.add_node("council_handoff", self.agents.council_handoff)
+
         builder.add_node("cartographer", self.agents.cartographer)
         
         # Add the branch subgraph as a node
@@ -48,7 +55,20 @@ class GraphBuilder:
         builder.add_node("structural_auditor", self.agents.structural_auditor)
 
         # Define Edges
-        builder.add_edge(START, "cartographer")
+        builder.add_edge(START, "recruiter")
+        builder.add_conditional_edges(
+            "recruiter",
+            self._route_to_next_brainstormer
+        )
+        builder.add_conditional_edges(
+            "council_member",
+            self._route_after_council_member
+        )
+        builder.add_conditional_edges(
+            "pedagogical_expert",
+            self._route_after_pedagogical_expert
+        )
+        builder.add_edge("council_handoff", "cartographer")
         builder.add_conditional_edges(
             "cartographer",
             self._distribute_nodes
@@ -104,7 +124,8 @@ class GraphBuilder:
                 "available_nodes": nodes, # Pass full list for prerequisite selection
                 "validation_status": False,
                 "draft_analysis": None,
-                "critique_feedback": None
+                "critique_feedback": None,
+                "node_expert_instructions": state.get("council_instructions", {}).get("expert", "")
             }
             sends.append(Send("branch_worker", branch_initial_state))
             
@@ -125,6 +146,79 @@ class GraphBuilder:
         """
         feedback = state.get("audit_feedback") or {}
         if feedback.get("is_valid") or state.get("audit_revision_count", 0) >= 3:
-            return END
+            # Transition to Final Council Review
+            state["final_council_index"] = 0
+            state["council_phase"] = "final_dag_review"
+            return self._route_to_next_final_auditor(state)
         else:
             return "synthesizer"
+
+    def _route_to_next_brainstormer(self, state: PaperState) -> str:
+        specialists = state.get("specialists", [])
+        index = state.get("current_specialist_index", 0)
+        
+        state["council_phase"] = "brainstorm"
+        if index < len(specialists):
+            role = specialists[index]
+            state["current_council_role"] = role
+            state["current_specialist_index"] = index + 1
+            return "council_member"
+        else:
+            return "pedagogical_expert"
+
+    def _route_after_council_member(self, state: PaperState) -> str:
+        phase = state.get("council_phase")
+        if phase == "brainstorm":
+            return self._route_to_next_brainstormer(state)
+        elif phase == "plan_audit":
+            return self._route_after_plan_audit(state)
+        else: # final_dag_review
+            return self._route_after_final_audit(state)
+
+    def _route_after_plan_audit(self, state: PaperState) -> str:
+        specialists = state.get("specialists", [])
+        index = state.get("current_specialist_index", 0)
+        
+        if index < len(specialists):
+            role = specialists[index]
+            state["current_council_role"] = role
+            state["current_specialist_index"] = index + 1
+            return "council_member"
+        else:
+            critiques = state.get("council_critiques", [])
+            iteration = state.get("council_iteration_count", 0)
+            
+            if not critiques or iteration >= 3:
+                return "council_handoff"
+            else:
+                state["current_specialist_index"] = 0
+                return "pedagogical_expert"
+
+    def _route_to_next_final_auditor(self, state: PaperState) -> str:
+        specialists = state.get("specialists", [])
+        index = state.get("final_council_index", 0)
+        
+        state["council_phase"] = "final_dag_review"
+        if index < len(specialists):
+            role = specialists[index]
+            state["current_council_role"] = role
+            state["final_council_index"] = index + 1
+            return "council_member"
+        else:
+            return "pedagogical_expert"
+
+    def _route_after_final_audit(self, state: PaperState) -> str:
+        return self._route_to_next_final_auditor(state)
+
+    def _route_after_pedagogical_expert(self, state: PaperState) -> str:
+        phase = state.get("council_phase")
+        if phase == "final_dag_review":
+            # Just finished final DAG review, now generate rubrics
+            state["council_phase"] = "rubric_generation"
+            return "pedagogical_expert"
+        elif phase == "rubric_generation":
+            return END
+        else: # design or revision
+            state["council_phase"] = "plan_audit"
+            state["current_specialist_index"] = 0
+            return "council_member"

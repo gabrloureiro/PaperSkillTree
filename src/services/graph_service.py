@@ -26,7 +26,7 @@ class GraphService:
             title = chunks[0].get("raw_text", "").split('\n')[0][:100]
         return title
 
-    async def process_paper(self, pdf_path: str) -> Dict[str, Any]:
+    async def process_paper(self, pdf_path: str, complexity: str = "simple") -> Dict[str, Any]:
         chunks = self.ingester.parse_pdf(pdf_path)
         initial_state = {
             "raw_text": chunks,
@@ -35,8 +35,20 @@ class GraphService:
             "skeleton_dag": [],
             "final_dag": None,
             "audit_feedback": None,
-            "audit_revision_count": 0
+            "audit_revision_count": 0,
+            "complexity": complexity,
+            "specialists": [],
+            "council_instructions": {},
+            "node_evaluator_rubrics": {},
+            "current_specialist_index": 0,
+            "current_council_role": "",
+            "council_chat_history": [],
+            "council_critiques": [],
+            "council_iteration_count": 0,
+            "consensus_met": False,
+            "proposed_plan": None
         }
+
         final_state = await self.graph.ainvoke(initial_state)
         
         skill_tree_nodes = final_state.get("skill_tree_nodes", [])
@@ -50,11 +62,13 @@ class GraphService:
             "raw_text": final_state.get("raw_text", []),
             "unprocessed_nodes": final_state.get("unprocessed_nodes", []),
             "metadata": {
-                "title": title
+                "title": title,
+                "complexity": complexity,
+                "node_evaluator_rubrics": final_state.get("node_evaluator_rubrics", {})
             }
         }
 
-    async def process_paper_stream(self, pdf_path: str):
+    async def process_paper_stream(self, pdf_path: str, complexity: str = "simple"):
         """
         Streams graph execution events for real-time visualization.
         """
@@ -66,8 +80,25 @@ class GraphService:
             "skeleton_dag": [],
             "final_dag": None,
             "audit_feedback": None,
-            "audit_revision_count": 0
+            "audit_revision_count": 0,
+            "complexity": complexity,
+            "specialists": [],
+            "council_instructions": {},
+            "node_evaluator_rubrics": {},
+            "current_specialist_index": 0,
+            "current_council_role": "",
+            "council_chat_history": [],
+            "council_critiques": [],
+            "council_iteration_count": 0,
+            "consensus_met": False,
+            "proposed_plan": None,
+            "final_council_index": 0,
+            "final_council_review_history": [],
+            "council_phase": "brainstorm"
         }
+
+
+
 
         last_state = initial_state
         async for event in self.graph.astream_events(initial_state, version="v2"):
@@ -103,7 +134,9 @@ class GraphService:
             "raw_text": last_state.get("raw_text", []),
             "unprocessed_nodes": last_state.get("unprocessed_nodes", []),
             "metadata": {
-                "title": title
+                "title": title,
+                "complexity": complexity,
+                "node_evaluator_rubrics": last_state.get("node_evaluator_rubrics", {})
             }
         }
         

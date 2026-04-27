@@ -30,17 +30,22 @@ class ChatService:
             if matching_chunk:
                 raw_text_chunk = matching_chunk.get("raw_text", "")
                 
-        return node, raw_text_chunk
+        rubrics = tree_data.get("metadata", {}).get("node_evaluator_rubrics", {})
+        node_rubric = rubrics.get(node_id)
+                
+        return node, raw_text_chunk, node_rubric
+
 
     async def chat_examiner(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]], passing_grade: str = "B-"):
-        node, raw_text = self.get_node_context(tree_id, node_id)
+        node, raw_text, rubric = self.get_node_context(tree_id, node_id)
         result = await self.examiner.interact(
             concept_name=node.get("concept_name", node_id),
             explanation=node.get("explanation", ""),
             raw_text=raw_text,
             message=message,
             chat_history=chat_history,
-            passing_grade=passing_grade
+            passing_grade=passing_grade,
+            rubric=rubric
         )
         
         if result.get("passed"):
@@ -57,7 +62,7 @@ class ChatService:
         return result
 
     async def chat_tutor(self, tree_id: str, node_id: str, message: str, chat_history: List[Dict[str, str]]):
-        node, raw_text = self.get_node_context(tree_id, node_id)
+        node, raw_text, _ = self.get_node_context(tree_id, node_id)
         return await self.tutor.interact(
             concept_name=node.get("concept_name", node_id),
             explanation=node.get("explanation", ""),

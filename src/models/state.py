@@ -68,6 +68,33 @@ class PaperState(TypedDict):
     final_dag: Annotated[Optional[SynthesizerOutput], lambda x, y: y]
     audit_feedback: Annotated[Optional[StructuralAuditOutput], lambda x, y: y]
     audit_revision_count: Annotated[int, operator.add]
+    
+    # New fields for Multi-Agent workflow
+    complexity: Annotated[str, lambda x, y: y] # "simple" or "complex"
+    field_of_study: Annotated[Optional[str], lambda x, y: y]
+    specialists: Annotated[List[str], lambda x, y: y]
+    learning_progression_strategy: Annotated[Optional[str], lambda x, y: y]
+    council_instructions: Annotated[Dict[str, str], lambda x, y: y]
+    council_review: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    node_evaluator_rubrics: Annotated[Dict[str, Any], lambda x, y: y]
+
+    # Consensus Council Fields
+    council_chat_history: Annotated[List[Dict[str, str]], operator.add]
+    proposed_plan: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    council_critiques: Annotated[List[str], lambda x, y: y]
+    consensus_met: Annotated[bool, lambda x, y: y]
+    council_iteration_count: Annotated[int, operator.add]
+    current_specialist_index: Annotated[int, lambda x, y: y]
+    current_council_role: Annotated[str, lambda x, y: y]
+    council_phase: Annotated[str, lambda x, y: y] # e.g., "brainstorm", "audit", "final_review"
+
+
+    # Final DAG Review Fields (Single Pass)
+    final_council_review_history: Annotated[List[Dict[str, str]], operator.add]
+    final_council_index: Annotated[int, lambda x, y: y]
+
+
+
 
 class BranchState(TypedDict):
     current_node_under_review: CartographerNode
@@ -81,3 +108,7 @@ class BranchState(TypedDict):
     available_nodes: List[CartographerNode]
     # The output we want to merge back to parent
     skill_tree_nodes: List[ExpertOutput]
+    
+    # Context from council
+    node_expert_instructions: str
+

@@ -157,15 +157,32 @@ function App() {
     }
   };
 
-  const handleUpload = async (file) => {
+  const [isComplexityModalOpen, setIsComplexityModalOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [selectedComplexity, setSelectedComplexity] = useState('simple');
+
+  const handleUpload = (file) => {
+    setPendingFile(file);
+    setIsComplexityModalOpen(true);
+  };
+
+  const confirmUpload = async () => {
+    if (!pendingFile) return;
+    
+    const file = pendingFile;
+    const complexity = selectedComplexity;
+    
+    setIsComplexityModalOpen(false);
+    setPendingFile(null);
     setIsLoading(true);
     setError(null);
     setSelectedNode(null);
+    
     try {
       const formData = new FormData();
       formData.append('file', file);
       
-      const res = await fetch(`${API_URL}/upload`, {
+      const res = await fetch(`${API_URL}/upload?complexity=${complexity}`, {
         method: 'POST',
         body: formData,
       });
@@ -332,6 +349,46 @@ function App() {
         )}
       </main>
       
+      {isComplexityModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2>How deeply would you like to understand the paper?</h2>
+            <div className="complexity-options">
+              <div 
+                className={`complexity-option ${selectedComplexity === 'simple' ? 'selected' : ''}`}
+                onClick={() => setSelectedComplexity('simple')}
+              >
+                <h3>Simple Option</h3>
+                <p>Understand the core arguments, reasoning, and main takeaways. Ideal for a quick but solid overview.</p>
+              </div>
+              <div 
+                className={`complexity-option ${selectedComplexity === 'complex' ? 'selected' : ''}`}
+                onClick={() => setSelectedComplexity('complex')}
+              >
+                <h3>Deep Understanding</h3>
+                <p>Completely teach everything in the paper. Includes models, formulas, nuances, and background knowledge.</p>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setIsComplexityModalOpen(false)}
+                style={{ padding: '8px 20px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={confirmUpload}
+                style={{ padding: '8px 24px', background: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Generate Skill Tree
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
