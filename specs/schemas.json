@@ -239,6 +239,157 @@
                 }
             },
             "additionalProperties": false
+        },
+        "RecruiterOutput": {
+            "type": "object",
+            "required": [
+                "field_of_study",
+                "specialists"
+            ],
+            "properties": {
+                "field_of_study": {
+                    "type": "string"
+                },
+                "specialists": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "CouncilMemberResponse": {
+            "type": "object",
+            "required": [
+                "message",
+                "role"
+            ],
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "CouncilDesignOutput": {
+            "type": "object",
+            "required": [
+                "progression_strategy",
+                "cartographer_instructions",
+                "expert_instructions",
+                "evaluator_instructions_template"
+            ],
+            "properties": {
+                "progression_strategy": {
+                    "type": "string"
+                },
+                "cartographer_instructions": {
+                    "type": "string"
+                },
+                "expert_instructions": {
+                    "type": "string"
+                },
+                "evaluator_instructions_template": {
+                    "type": "string"
+                },
+                "revision_rationale": {
+                    "type": "string"
+                }
+            }
+        },
+        "CouncilAudit": {
+            "type": "object",
+            "required": [
+                "is_approved"
+            ],
+            "properties": {
+                "is_approved": {
+                    "type": "boolean"
+                },
+                "critique": {
+                    "type": "string"
+                }
+            }
+        },
+        "CouncilReviewOutput": {
+            "type": "object",
+            "required": [
+                "is_acceptable",
+                "critique"
+            ],
+            "properties": {
+                "is_acceptable": {
+                    "type": "boolean"
+                },
+                "critique": {
+                    "type": "string"
+                }
+            }
+        },
+        "EvaluatorRubric": {
+            "type": "object",
+            "required": [
+                "instructions",
+                "rubric_a_plus",
+                "rubric_a",
+                "rubric_a_minus",
+                "rubric_b_plus",
+                "rubric_b",
+                "rubric_b_minus",
+                "rubric_c_plus",
+                "rubric_c",
+                "rubric_c_minus",
+                "rubric_d_plus",
+                "rubric_d",
+                "rubric_d_minus",
+                "rubric_f"
+            ],
+            "properties": {
+                "instructions": {
+                    "type": "string"
+                },
+                "rubric_a_plus": {
+                    "type": "string"
+                },
+                "rubric_a": {
+                    "type": "string"
+                },
+                "rubric_a_minus": {
+                    "type": "string"
+                },
+                "rubric_b_plus": {
+                    "type": "string"
+                },
+                "rubric_b": {
+                    "type": "string"
+                },
+                "rubric_b_minus": {
+                    "type": "string"
+                },
+                "rubric_c_plus": {
+                    "type": "string"
+                },
+                "rubric_c": {
+                    "type": "string"
+                },
+                "rubric_c_minus": {
+                    "type": "string"
+                },
+                "rubric_d_plus": {
+                    "type": "string"
+                },
+                "rubric_d": {
+                    "type": "string"
+                },
+                "rubric_d_minus": {
+                    "type": "string"
+                },
+                "rubric_f": {
+                    "type": "string"
+                }
+            }
         }
     }
 }
