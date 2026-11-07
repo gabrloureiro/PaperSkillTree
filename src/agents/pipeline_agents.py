@@ -226,7 +226,7 @@ class PipelineAgents:
         council_instr = state.get("council_instructions", {}).get("cartographer", "")
         complexity = state.get("complexity", "simple")
         
-        node_count_limit = "5 to 10 nodes at most. Keep it linear and high-level." if complexity == "simple" else "as many nodes as necessary to cover the entirety of the paper's details, including formulas and background, providing an exhaustive map."
+        node_count_limit = "5 to 15 nodes at most. Keep it linear and high-level." if complexity == "simple" else "20 to 30 nodes. You MUST be exhaustive, breaking down complex sections into many granular sub-concepts."
 
         system_instruction += (
             f"\n\nCOUNCIL DIRECTIVES:\n{council_instr}\n\n"
@@ -240,13 +240,24 @@ class PipelineAgents:
             "Analyze ALL provided text sections to extract a comprehensive list of concepts. "
             "Propose a 'skeleton_dag' map that distributes concepts evenly. "
             "If any given concept has more than 3 prerequisites, break it down or distribute prerequisites into a sequential chain of intermediary nodes. "
-            "For each extracted concept, explicitly tie it to the exact section header it originated from in the 'source_section_header' field. "
+            "CONNECTIVITY (MANDATORY): Every node MUST be connected to the graph. There should be no 'islands' or isolated nodes. "
+            "Every node must have at least one incoming prerequisite (unless it's the very first node) and eventually lead to higher-level understanding. "
+            "Ensure a clear 'path of comprehension' from simple concepts to the paper's final conclusions.\n"
+            "SOURCE TRACING: Maintain the 'source_section_header' for each node."
             "Also, provide a generic 'icon_name' for the concept (PascalCase Lucide icon name). "
             "Ensure you capture high-level themes (e.g., 'Transformer Architecture') and granular details (e.g., 'Multi-Head Attention').\n"
             "Raw text sections:\n" + json.dumps(state.get("raw_text", []), indent=2)
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, CartographerOutputModel)
         nodes = result.get("nodes", [])
+        
+        # --- ROBUST ID GENERATION ---
+        for i, node in enumerate(nodes):
+            if not node.get("node_id"):
+                # Fallback to concept name or index
+                clean_name = node.get("concept_name", f"node_{i}").lower().replace(" ", "_")
+                node["node_id"] = f"{clean_name}_{i}"
+                
         skeleton = result.get("skeleton_dag", [])
         return {"unprocessed_nodes": nodes, "skeleton_dag": skeleton}
 
@@ -296,7 +307,8 @@ class PipelineAgents:
         system_instruction = self.llm_service.get_system_instruction("Validator", ValidatorOutputModel)
         system_instruction += (
             "\nSpecific instruction: You are a thorough fact-checker. Your goal is to verify if the Expert's explanation is factually correct. "
-            "Flag any claim that is not explicitly stated in the Source Text, including contradictions, misinterpretations, and hallucinations."
+            "Flag any claim that is not explicitly stated in the Source Text, including contradictions, misinterpretations, and hallucinations. "
+            "STRICT GROUNDING: If the Expert uses external knowledge NOT found in the Source Text, mark it as a hallucination."
         )
         draft = state.get("draft_analysis") or {}
         raw_text = state.get("current_raw_text_under_review") or ""
@@ -326,8 +338,10 @@ class PipelineAgents:
         draft = state.get("draft_analysis") or {}
         critique = state.get("critique_feedback") or {}
         raw_text = state.get("current_raw_text_under_review") or ""
+        
         prompt = (
-            f"The Validator found issues with the draft. Rewrite it to be 100% accurate to the source.\n"
+            f"The Validator found issues with the draft. Rewrite it to be 100% accurate to the source text.\n"
+            f"STRICT GROUNDING REQUIREMENT: Use ONLY the information provided in the 'Source' text below. Do NOT use any external knowledge or make additive claims not found in the paper.\n"
             f"Issues: {json.dumps(critique, indent=2)}\n"
             f"Original Draft: {json.dumps(draft, indent=2)}\n"
             f"Source: {raw_text}\n\n"
@@ -335,17 +349,16 @@ class PipelineAgents:
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, ExpertOutputModel)
         
-        # --- BULLETPROOF METADATA PRESERVATION ---
+        # Preserve metadata
         result["node_id"] = node.get("node_id")
         result["concept_name"] = node.get("concept_name")
         result["icon_name"] = node.get("icon_name")
-        result["source_section_header"] = node.get("source_section_header") # PRESERVE FOR FRONTEND CLUSTERING
+        result["source_section_header"] = node.get("source_section_header")
         
-        output = {
+        return {
             "draft_analysis": result,
             "revision_count": state.get("revision_count", 0) + 1
         }
-        return output
 
     async def synthesizer(self, state: Dict[str, Any]) -> Dict[str, Any]:
         system_instruction = self.llm_service.get_system_instruction("Synthesizer", SynthesizerOutputModel)
@@ -360,7 +373,8 @@ class PipelineAgents:
             "7. MAINTAIN EVEN DENSITY: Prune redundant edges and avoid 'bottleneck' nodes with too many inputs. Two inputs is a good average, the number should never go above 3.\n"
             "8. Ensure the graph is a Directed Acyclic Graph (DAG) with a clear pedagogical flow.\n"
             "9. If Expert dependencies conflict with the Skeleton, prioritize logical comprehension over paper narrative.\n"
-            "10. Use the 'audit_feedback' if provided to correct structural imbalances."
+            "10. Use the 'audit_feedback' if provided to correct structural imbalances.\n"
+            "11. NO DISCONNECTED SUBGRAPHS: Every single node MUST be reachable from the start of the paper. If a node is isolated, you MUST link it to its most logical prerequisite."
         )
         nodes = state.get("skill_tree_nodes") or []
         skeleton = state.get("skeleton_dag") or []
@@ -376,7 +390,7 @@ class PipelineAgents:
             f"- Each edge should represent a necessary 'step' in understanding.\n"
             f"- Avoid creating 'bottleneck' nodes (nodes with too many incoming edges).\n"
             f"- Integrate technical dependencies while preserving the optimized density of the skeleton.\n"
-            f"- Ensure every node is reachable from a root node (start of the paper/concepts)."
+            f"- Ensure every node is reachable from a root node (start of the paper/concepts). NO DISCONNECTED SUBGRAPHS."
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, SynthesizerOutputModel)
         
@@ -424,8 +438,8 @@ class PipelineAgents:
         system_instruction = self.llm_service.get_system_instruction("StructuralAuditor", StructuralAuditorOutputModel)
         system_instruction += (
             "\n\nAUDIT DIRECTIVE:\n"
-            "1. CIRCULARITY: Verify all prerequisite relationships to ensure no cycles exist. This includes verifying that there are nodes with no prerequisites, as well as nodes with no target nodes.\n"
-            "2. CONNECTIVITY: Ensure the graph is fully connected. Every node should be part of the flow.\n"
+            "1. NO CYCLES (CRITICAL): The skill tree MUST be a Directed Acyclic Graph (DAG). If any circular dependencies exist (e.g., A -> B -> C -> A), the visualization will CRASH. You MUST break all cycles by identifying the 'entry point' and 'exit point' of loops.\n"
+            "2. TOTAL CONNECTIVITY (CRITICAL): There MUST be NO disconnected subgraphs. Every single node MUST be reachable from the 'start' of the tree. If you find isolated nodes, link them to the most relevant parent node.\n"
             "3. TOPOLOGICAL BALANCE: Identify 'bottlenecks' (nodes with > 3 prerequisites). Suggest splitting or redistribution.\n"
             "4. COMPREHENSION FLOW: Verify that prerequisites logically aid in understanding the target concept.\n"
             "5. ALIGNMENT: Ensure the graph represents the paper's internal logic and comprehension pipeline."
@@ -435,12 +449,43 @@ class PipelineAgents:
         dag = state.get("final_dag", {}).get("directed_acyclic_graph", [])
         skeleton = state.get("skeleton_dag") or []
         
+        # --- REACHABILITY AUDIT ---
+        # Build adjacency list. Use .get() throughout: a malformed edge or a node
+        # missing an id must not take the whole audit down with a KeyError.
+        adj = {}
+        for e in dag:
+            s, t = e.get("source"), e.get("target")
+            if not s or not t:
+                continue
+            adj.setdefault(s, []).append(t)
+
+        node_ids = [n.get("node_id") for n in nodes if n.get("node_id")]
+        targets = {e.get("target") for e in dag}
+
+        # Find roots (nodes with no prerequisites)
+        roots = [nid for nid in node_ids if nid not in targets]
+
+        # BFS for reachability
+        reachable = set()
+        queue = list(roots)
+        while queue:
+            curr = queue.pop(0)
+            if curr not in reachable:
+                reachable.add(curr)
+                queue.extend(adj.get(curr, []))
+
+        islands = [nid for nid in node_ids if nid not in reachable]
+        island_msg = ""
+        if islands:
+            island_msg = f"\n\nCRITICAL ERROR: The following nodes are DISCONNECTED 'islands' and cannot be reached from the start of the paper: {', '.join(islands)}. You MUST add prerequisites to these nodes to connect them to the main tree."
+
         prompt = (
             f"Audit the following skill tree structure for logical and topological integrity.\n"
             f"Compare the 'Current DAG' against the 'Initial Skeleton' to identify inversions or lost logical flow.\n\n"
             f"Nodes:\n{json.dumps(nodes, indent=2)}\n\n"
             f"Initial Skeleton Flow:\n{json.dumps(skeleton, indent=2)}\n\n"
-            f"Current DAG Edges:\n{json.dumps(dag, indent=2)}\n"
+            f"Current DAG Edges:\n{json.dumps(dag, indent=2)}\n\n"
+            f"{island_msg}"
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, StructuralAuditorOutputModel)
         
