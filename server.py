@@ -81,10 +81,20 @@ async def upload_pdf_stream(file: UploadFile = File(...), complexity: str = "sim
 
     content = await file.read()
     file_hash = storage_service.get_file_hash(content)
+    
+    # Check cache for instant recovery
+    cached_tree = storage_service.load_skill_tree(file_hash)
+    
     pdf_path = storage_service.save_pdf(file_hash, content)
             
     async def event_generator():
         try:
+            if cached_tree:
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Loading cached skill tree...'})}\n\n"
+                yield f"data: {json.dumps({'type': 'final_result', 'data': cached_tree})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'tree_id': file_hash})}\n\n"
+                return
+
             async for event in graph_service.process_paper_stream(pdf_path, complexity):
                 if event.get("type") == "final_result":
                     storage_service.save_skill_tree(file_hash, event["data"])

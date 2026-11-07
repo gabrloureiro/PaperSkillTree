@@ -175,6 +175,19 @@ body {
   color: var(--text-secondary);
 }
 
+.custom-node.skeleton {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  border-style: dashed;
+  color: rgba(255, 255, 255, 0.3);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.98); }
+}
+
 .custom-node:hover {
   box-shadow: 0 0 25px var(--accent-glow);
 }

@@ -72,7 +72,7 @@ const CustomNode = ({ data, selected }) => {
           </div>
         </NodeToolbar>
       )}
-      <div className={`custom-node ${data.isCompleted ? 'completed' : data.isUnlocked ? 'unlocked' : 'locked'} ${isHoverMode ? 'hover-mode' : ''} ${selected ? 'is-selected' : ''}`}>
+      <div className={`custom-node ${data.isSkeleton ? 'skeleton' : data.isCompleted ? 'completed' : data.isUnlocked ? 'unlocked' : 'locked'} ${isHoverMode ? 'hover-mode' : ''} ${selected ? 'is-selected' : ''}`}>
         <Handle type="target" position={Position.Left} isConnectable={false} />
         <div className="icon-container">
           <IconComponent size={24} />
@@ -291,7 +291,8 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
     const initialNodes = (data.skill_tree_nodes || []).map((node) => {
       const isCompleted = completedNodes.includes(node.node_id);
       const isUnlocked = unlockedNodes.includes(node.node_id);
-      const isLocked = !isCompleted && !isUnlocked;
+      const isLocked = !isCompleted && !isUnlocked && !node.isSkeleton;
+      const isSkeleton = node.isSkeleton;
 
       return {
         id: node.node_id,
@@ -304,6 +305,7 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
           isCompleted,
           isUnlocked,
           isLocked,
+          isSkeleton,
           showLabels,
           onClosePanel,
           markCompleted: () => markNodeCompleted(node.node_id),
@@ -327,11 +329,14 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
 
     // Process edges
     const initialEdges = (data.directed_acyclic_graph || []).map((edge, index) => {
+      const isSkeletonNode = data.skill_tree_nodes?.find(n => n.node_id === edge.source || n.node_id === edge.target)?.isSkeleton;
       const isSourceCompleted = completedNodes.includes(edge.source);
 
       let edgeColor = 'var(--text-secondary)';
       if (isSourceCompleted) {
         edgeColor = 'rgb(16, 185, 129)'; // green
+      } else if (isSkeletonNode) {
+        edgeColor = 'rgba(154, 160, 166, 0.3)'; // dim
       }
 
       return {
@@ -341,7 +346,11 @@ const GraphViewer = ({ data, onNodeClick, completedNodes = [], unlockedNodes = [
         type: 'elk',
         animated: false,
         zIndex: isSourceCompleted ? 0 : 10, // Completed (green) lines stay at the bottom
-        style: { stroke: edgeColor, strokeWidth: 2 },
+        style: { 
+          stroke: edgeColor, 
+          strokeWidth: 2,
+          strokeDasharray: isSkeletonNode ? '5,5' : 'none'
+        },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: edgeColor,

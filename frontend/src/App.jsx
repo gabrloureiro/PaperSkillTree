@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import GraphViewer from './components/GraphViewer';
 import NodeSidePanel from './components/NodeSidePanel';
+import ProcessingLog from './components/ProcessingLog';
 import { Network } from 'lucide-react';
 import './App.css';
 
@@ -125,13 +126,16 @@ function App() {
     setIsLoading(true);
     setError(null);
     setSelectedNode(null);
+    setTreeData(null);
+    setStreamingTreeData(null);
+    setProcessingEvents([]);
+    setSelectedTreeId(treeId);
     try {
       const res = await fetch(`${API_URL}/skill-trees/${treeId}`);
       if (!res.ok) throw new Error('Failed to load skill tree');
       const data = await res.json();
       const loadedTreeData = data.tree_data;
       setTreeData(loadedTreeData);
-      setSelectedTreeId(treeId);
       
       // Pull passing grade from backend if available
       if (loadedTreeData.metadata?.passing_grade) {
@@ -166,6 +170,59 @@ function App() {
     setIsComplexityModalOpen(true);
   };
 
+  const [processingEvents, setProcessingEvents] = useState([]);
+  const [streamingTreeData, setStreamingTreeData] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleStreamEvent = useCallback((event) => {
+    if (event.type === 'agent_start') {
+      setProcessingEvents(prev => [...prev, { type: 'start', agent: event.agent, timestamp: Date.now() }]);
+    } else if (event.type === 'agent_stop') {
+      // Could handle stop if needed, but start/message is usually enough
+    } else if (event.type === 'agent_message') {
+      setProcessingEvents(prev => [...prev, { type: 'message', agent: event.agent, content: event.content, timestamp: Date.now() }]);
+    } else if (event.type === 'skeleton_discovered') {
+      setStreamingTreeData({
+        skill_tree_nodes: event.nodes.map(n => ({ ...n, isSkeleton: true })),
+        directed_acyclic_graph: event.edges
+      });
+    } else if (event.type === 'node_finalized') {
+      setStreamingTreeData(prev => {
+        if (!prev) return prev;
+        const existingNode = prev.skill_tree_nodes.find(n => n.node_id === event.node.node_id);
+        let newNodes;
+        if (existingNode) {
+          newNodes = prev.skill_tree_nodes.map(n => 
+            n.node_id === event.node.node_id ? { ...event.node, isSkeleton: false } : n
+          );
+        } else {
+          newNodes = [...prev.skill_tree_nodes, { ...event.node, isSkeleton: false }];
+        }
+        return { ...prev, skill_tree_nodes: newNodes };
+      });
+    } else if (event.type === 'graph_synthesized') {
+      setStreamingTreeData(prev => ({
+        ...prev,
+        directed_acyclic_graph: event.edges,
+        skill_tree_nodes: (event.nodes || prev.skill_tree_nodes).map(n => ({ ...n, isSkeleton: false }))
+      }));
+    } else if (event.type === 'final_result') {
+      setTreeData(event.data);
+      // Wait a bit before turning off processing for smooth transition
+      setTimeout(() => {
+        setIsProcessing(false);
+        setIsLoading(false);
+      }, 1000);
+    } else if (event.type === 'complete') {
+      if (event.tree_id) setSelectedTreeId(event.tree_id);
+      fetchSkillTrees();
+    } else if (event.type === 'error') {
+      setError(event.detail);
+      setIsProcessing(false);
+      setIsLoading(false);
+    }
+  }, [fetchSkillTrees]);
+
   const confirmUpload = async () => {
     if (!pendingFile) return;
     
@@ -175,48 +232,53 @@ function App() {
     setIsComplexityModalOpen(false);
     setPendingFile(null);
     setIsLoading(true);
+    setIsProcessing(true);
+    setProcessingEvents([]);
+    setStreamingTreeData(null);
+    setTreeData(null);
     setError(null);
     setSelectedNode(null);
+    setSelectedTreeId(null);
     
     try {
       const formData = new FormData();
       formData.append('file', file);
       
-      const res = await fetch(`${API_URL}/upload?complexity=${complexity}`, {
+      const response = await fetch(`${API_URL}/upload-stream?complexity=${complexity}`, {
         method: 'POST',
         body: formData,
       });
       
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      const loadedTreeData = data.tree_data;
+      if (!response.ok) throw new Error('Upload failed');
       
-      setTreeData(loadedTreeData);
-      setSelectedTreeId(data.tree_id || 'recent_upload'); 
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
       
-      // Pull passing grade from backend if available
-      if (loadedTreeData.metadata?.passing_grade) {
-        setPassingGrade(prev => ({ ...prev, [data.tree_id]: loadedTreeData.metadata.passing_grade }));
-      }
-
-      // Sync completed nodes from backend
-      if (loadedTreeData.skill_tree_nodes) {
-        const backendCompleted = loadedTreeData.skill_tree_nodes
-          .filter(n => n.completed)
-          .map(n => n.node_id);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
         
-        setCompletedNodes(prev => {
-          const combined = new Set([...prev, ...backendCompleted]);
-          return Array.from(combined);
-        });
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop(); // Keep incomplete line in buffer
+        
+        for (const part of parts) {
+          if (part.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(part.slice(6));
+              handleStreamEvent(data);
+            } catch (e) {
+              console.error("Failed to parse stream event:", e, part);
+            }
+          }
+        }
       }
-      
-      fetchSkillTrees(); // Refresh list
     } catch (err) {
       console.error(err);
       setError('Failed to upload and process PDF.');
-    } finally {
       setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -303,49 +365,78 @@ function App() {
           </div>
         )}
 
-        {isLoading && (
+        {isLoading && !isProcessing && (
           <div className="empty-state">
             <div style={{ width: 40, height: 40, border: '4px solid var(--border-color)', borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-            <h3 style={{ marginTop: 16 }}>Processing Paper...</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>This may take a few minutes as agents extract and validate concepts.</p>
+            <h3 style={{ marginTop: 16 }}>Loading Skill Tree...</h3>
           </div>
         )}
 
-        {treeData && !isLoading && (
-          <GraphViewer 
-            data={treeData} 
-            onNodeClick={handleNodeClick} 
-            completedNodes={completedNodes}
-            unlockedNodes={unlockedNodes}
-            isDebugMode={isDebugMode}
-            setIsDebugMode={setIsDebugMode}
-            selectedNodeId={selectedNode?.node_id}
-            selectedNodeFullData={selectedNode}
-            treeId={selectedTreeId}
-            onClosePanel={handleClosePanel}
-            markNodeCompleted={markNodeCompleted}
-            toggleNodeCompleted={toggleNodeCompleted}
-            panelLayout={panelLayout}
-            setPanelLayout={setPanelLayout}
-            tutorHistories={tutorHistories}
-            setTutorHistories={setTutorHistories}
-            examinerAssessments={examinerAssessments}
-            setExaminerAssessments={setExaminerAssessments}
-            passingGrade={passingGrade[selectedTreeId] || "B-"}
-            setPassingGrade={async (grade) => {
-              setPassingGrade(prev => ({ ...prev, [selectedTreeId]: grade }));
-              // Sync with backend
-              try {
-                await fetch(`${API_URL}/skill-trees/${selectedTreeId}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ passing_grade: grade }),
-                });
-              } catch (error) {
-                console.error("Failed to sync passing grade to backend:", error);
-              }
-            }}
-          />
+        {(treeData || isProcessing) && (
+          <div className="main-content-layout">
+            <div className="graph-container-wrapper" style={{ width: (panelLayout === 'sidebar' && selectedNode) || isProcessing ? 'calc(100% - 400px)' : '100%' }}>
+              <GraphViewer 
+                data={isProcessing ? streamingTreeData : treeData} 
+                onNodeClick={handleNodeClick} 
+                completedNodes={completedNodes}
+                unlockedNodes={unlockedNodes}
+                isDebugMode={isDebugMode}
+                setIsDebugMode={setIsDebugMode}
+                selectedNodeId={selectedNode?.node_id}
+                selectedNodeFullData={selectedNode}
+                treeId={selectedTreeId}
+                onClosePanel={handleClosePanel}
+                markNodeCompleted={markNodeCompleted}
+                toggleNodeCompleted={toggleNodeCompleted}
+                panelLayout={panelLayout}
+                setPanelLayout={setPanelLayout}
+                tutorHistories={tutorHistories}
+                setTutorHistories={setTutorHistories}
+                examinerAssessments={examinerAssessments}
+                setExaminerAssessments={setExaminerAssessments}
+                passingGrade={passingGrade[selectedTreeId] || "B-"}
+                setPassingGrade={async (grade) => {
+                  setPassingGrade(prev => ({ ...prev, [selectedTreeId]: grade }));
+                  // Sync with backend
+                  try {
+                    await fetch(`${API_URL}/skill-trees/${selectedTreeId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ passing_grade: grade }),
+                    });
+                  } catch (error) {
+                    console.error("Failed to sync passing grade to backend:", error);
+                  }
+                }}
+              />
+            </div>
+            
+            {isProcessing && (
+              <ProcessingLog events={processingEvents} isProcessing={isProcessing} />
+            )}
+            
+            {panelLayout === 'sidebar' && selectedNodeId && !isProcessing && (
+              <div className="side-panel-wrapper">
+                <NodeSidePanel
+                  node={selectedNode}
+                  treeData={treeData}
+                  treeId={selectedTreeId}
+                  onClose={handleClosePanel}
+                  isUnlocked={unlockedNodes.includes(selectedNodeId)}
+                  isCompleted={completedNodes.includes(selectedNodeId)}
+                  markCompleted={() => markNodeCompleted(selectedNodeId)}
+                  isDebugMode={isDebugMode}
+                  toggleCompleted={() => toggleNodeCompleted(selectedNodeId)}
+                  layout="sidebar"
+                  tutorHistories={tutorHistories}
+                  setTutorHistories={setTutorHistories}
+                  examinerAssessments={examinerAssessments}
+                  setExaminerAssessments={setExaminerAssessments}
+                  passingGrade={passingGrade[selectedTreeId] || "B-"}
+                />
+              </div>
+            )}
+          </div>
         )}
       </main>
       

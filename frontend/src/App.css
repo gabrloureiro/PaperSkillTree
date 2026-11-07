@@ -9,8 +9,26 @@
   flex: 1;
   position: relative;
   height: 100%;
+  overflow: hidden;
+}
+
+.main-content-layout {
   display: flex;
-  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.graph-container-wrapper {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.side-panel-wrapper {
+  width: 400px;
+  height: 100%;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-panel);
+  z-index: 50;
 }
 
 .empty-state {
