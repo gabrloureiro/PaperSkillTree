@@ -21,16 +21,22 @@ class PipelineAgents:
             "\n\nROLE:\n"
             "You are the organizer of a teaching council for an important lecture series. Your task is to analyze the provided research paper "
             "and determine its primary field of study. Then, you must identify a set of specialist expert roles (e.g., 'Quantum Physicist', "
-            "'Machine Learning Researcher', 'Linguistic Philosopher') who are best suited to discuss and teach the concepts in this paper."
+            "'Machine Learning Researcher', 'Linguistic Philosopher') who are best suited to discuss and teach the concepts in this paper. "
+            "Ensure the roles are diverse and represent different technical angles of the paper to ensure a multi-dimensional audit.\n\n"
+            "COUNCIL SIZE: You MUST identify between 3 and 5 specialists. Do not exceed 5 roles."
         )
         prompt = (
             "Analyze the following paper text and identify the field of study and the best specialists to teach it.\n\n"
             "Paper Text (excerpts):\n" + json.dumps([c.get("raw_text", "")[:2000] for c in state.get("raw_text", [])[:5]], indent=2)
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, RecruiterOutputModel)
+        specialists = result.get("specialists", [])
         return {
             "field_of_study": result.get("field_of_study"),
-            "specialists": result.get("specialists")
+            "specialists": specialists,
+            "current_specialist_index": 0,
+            "current_council_role": specialists[0] if specialists else "Expert",
+            "council_phase": "brainstorm"
         }
 
     async def council_member(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -52,12 +58,18 @@ class PipelineAgents:
         system_instruction += f"\n\nIDENTITY: You are the {role} member of the Teaching Council.\n"
         
         if phase == "brainstorm":
+            target_range = "5-8 nodes" if state.get("complexity") == "simple" else "20-30 nodes"
             system_instruction += (
-                f"TASK: Identify must-have technical concepts, formulas, and specific details from this paper in '{field}' "
-                "that MUST be taught. Focus on FACTUAL ACCURACY and technical depth."
+                f"TASK: As the {role}, identify MUST-HAVE technical concepts, formulas, and specific details from this paper "
+                f"that fall strictly within your domain of expertise in '{field}'.\n"
+                "CRITICAL: Do NOT provide a general summary. Do NOT repeat points already made by other council members. "
+                "Instead, focus on the unique technical nuances that ONLY someone with your specific background would notice. "
+                "Be a 'devil's advocate' for technical depth—ensure the Pedagogical Expert does not skip challenging concepts.\n\n"
+                f"SCALE TARGET: We are aiming for a learning map of {target_range}. Identify specific sub-concepts that "
+                "contribute to this level of granularity."
             )
             prompt = (
-                f"Share your technical requirements for the learning progression.\n\n"
+                f"From your perspective as a {role}, what are the technical non-negotiables for this paper?\n\n"
                 f"Previous Discussion:\n{json.dumps(history, indent=2)}\n\n"
                 f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
             )
@@ -84,15 +96,38 @@ class PipelineAgents:
 
         result = await self.llm_service.generate_json(system_instruction, prompt, output_model)
         
+        specialists = state.get("specialists", [])
+        
+        # Calculate next state
+        next_index = 0
+        if phase == "final_dag_review":
+            next_index = state.get("final_council_index", 0) + 1
+        else:
+            next_index = state.get("current_specialist_index", 0) + 1
+            
+        next_role = ""
+        if next_index < len(specialists):
+            next_role = specialists[next_index]
+        else:
+            next_role = "Pedagogical Expert"
+
+        output = {
+            "current_role_snapshot": role,
+            "current_council_role": next_role
+        }
+        
         if phase == "plan_audit":
-            output = {}
+            output["current_specialist_index"] = next_index
             if not result.get("is_approved"):
                 output["council_critiques"] = [f"{role}: {result.get('critique')}"]
-            return output
         elif phase == "final_dag_review":
-            return {"final_council_review_history": [{"role": role, "message": result.get("message")}]}
+            output["final_council_index"] = next_index
+            output["final_council_review_history"] = [{"role": role, "message": result.get("message")}]
         else: # brainstorm
-            return {"council_chat_history": [{"role": role, "message": result.get("message")}]}
+            output["current_specialist_index"] = next_index
+            output["council_chat_history"] = [{"role": role, "message": result.get("message")}]
+            
+        return output
 
     async def pedagogical_expert(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -125,7 +160,10 @@ class PipelineAgents:
             )
             prompt = f"Nodes to process:\n" + json.dumps([{"node_id": n.get("node_id"), "concept_name": n.get("concept_name"), "explanation": n.get("explanation")} for n in nodes], indent=2)
             result = await self.llm_service.generate_json(system_instruction, prompt, NodeEvaluatorRubricsModel)
-            return {"node_evaluator_rubrics": result.get("rubrics", {})}
+            return {
+                "node_evaluator_rubrics": result.get("rubrics", {}),
+                "current_role_snapshot": "Pedagogical Expert"
+            }
 
         elif phase == "final_dag_review":
             system_instruction += (
@@ -138,7 +176,12 @@ class PipelineAgents:
                 f"DAG Edges:\n{json.dumps(state.get('final_dag', {}).get('directed_acyclic_graph', []), indent=2)}"
             )
             result = await self.llm_service.generate_json(system_instruction, prompt, CouncilReviewOutputModel)
-            return {"council_review": result}
+            return {
+                "council_review": result,
+                "current_role_snapshot": "Pedagogical Expert",
+                "council_phase": "rubric_generation",
+                "current_council_role": "Pedagogical Expert"
+            }
 
         else: # Design or Revision
             iteration = state.get("council_iteration_count", 0)
@@ -153,10 +196,14 @@ class PipelineAgents:
                 f"Full Paper Context:\n" + json.dumps(state.get("raw_text", []), indent=2)
             )
             result = await self.llm_service.generate_json(system_instruction, prompt, CouncilDesignOutputModel)
+            specialists = state.get("specialists", [])
             return {
                 "proposed_plan": result,
                 "council_iteration_count": 1,
-                "council_critiques": []
+                "council_critiques": [],
+                "council_phase": "plan_audit",
+                "current_specialist_index": 0,
+                "current_council_role": specialists[0] if specialists else "Expert"
             }
 
     async def council_handoff(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -394,7 +441,19 @@ class PipelineAgents:
         )
         result = await self.llm_service.generate_json(system_instruction, prompt, StructuralAuditorOutputModel)
         
-        return {
+        # audit_revision_count reduces with operator.add, so return the increment
+        # itself (1), not the running total -- returning the total makes the reducer
+        # add a cumulative value and the count grows 1, 3, 7, ...
+        revision_count = state.get("audit_revision_count", 0) + 1
+        output = {
             "audit_feedback": result,
-            "audit_revision_count": state.get("audit_revision_count", 0) + 1
+            "audit_revision_count": 1
         }
+
+        if result.get("is_valid") or revision_count >= 3:
+            specialists = state.get("specialists", [])
+            output["final_council_index"] = 0
+            output["council_phase"] = "final_dag_review"
+            output["current_council_role"] = specialists[0] if specialists else "Expert"
+            
+        return output

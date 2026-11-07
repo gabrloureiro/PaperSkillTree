@@ -144,11 +144,8 @@ class GraphBuilder:
         """
         Routing logic for the structural auditor.
         """
-        feedback = state.get("audit_feedback") or {}
-        if feedback.get("is_valid") or state.get("audit_revision_count", 0) >= 3:
-            # Transition to Final Council Review
-            state["final_council_index"] = 0
-            state["council_phase"] = "final_dag_review"
+        # If we've transitioned to final_dag_review phase, it means the auditor passed or maxed out
+        if state.get("council_phase") == "final_dag_review":
             return self._route_to_next_final_auditor(state)
         else:
             return "synthesizer"
@@ -157,11 +154,7 @@ class GraphBuilder:
         specialists = state.get("specialists", [])
         index = state.get("current_specialist_index", 0)
         
-        state["council_phase"] = "brainstorm"
         if index < len(specialists):
-            role = specialists[index]
-            state["current_council_role"] = role
-            state["current_specialist_index"] = index + 1
             return "council_member"
         else:
             return "pedagogical_expert"
@@ -180,9 +173,6 @@ class GraphBuilder:
         index = state.get("current_specialist_index", 0)
         
         if index < len(specialists):
-            role = specialists[index]
-            state["current_council_role"] = role
-            state["current_specialist_index"] = index + 1
             return "council_member"
         else:
             critiques = state.get("council_critiques", [])
@@ -191,18 +181,13 @@ class GraphBuilder:
             if not critiques or iteration >= 3:
                 return "council_handoff"
             else:
-                state["current_specialist_index"] = 0
                 return "pedagogical_expert"
 
     def _route_to_next_final_auditor(self, state: PaperState) -> str:
         specialists = state.get("specialists", [])
         index = state.get("final_council_index", 0)
         
-        state["council_phase"] = "final_dag_review"
         if index < len(specialists):
-            role = specialists[index]
-            state["current_council_role"] = role
-            state["final_council_index"] = index + 1
             return "council_member"
         else:
             return "pedagogical_expert"
@@ -211,14 +196,12 @@ class GraphBuilder:
         return self._route_to_next_final_auditor(state)
 
     def _route_after_pedagogical_expert(self, state: PaperState) -> str:
-        phase = state.get("council_phase")
-        if phase == "final_dag_review":
-            # Just finished final DAG review, now generate rubrics
-            state["council_phase"] = "rubric_generation"
+        if state.get("council_phase") == "rubric_generation":
+            # pedagogical_expert sets this phase itself when it finishes the
+            # final_dag_review pass, so the phase alone cannot tell us whether the
+            # rubric pass has run yet. Only terminate once it has produced output.
+            if state.get("node_evaluator_rubrics"):
+                return END
             return "pedagogical_expert"
-        elif phase == "rubric_generation":
-            return END
         else: # design or revision
-            state["council_phase"] = "plan_audit"
-            state["current_specialist_index"] = 0
             return "council_member"
