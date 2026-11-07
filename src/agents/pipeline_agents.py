@@ -312,9 +312,12 @@ class PipelineAgents:
             "critique_feedback": result,
             "validation_status": is_valid
         }
-        if is_valid:
+        # Emit the draft once it is valid OR the revision budget is exhausted. This
+        # mirrors the exit condition in GraphBuilder._route_after_validator: without
+        # the second clause a node the Validator never approves is dropped silently.
+        if is_valid or state.get("revision_count", 0) >= 3:
             output["skill_tree_nodes"] = [draft]
-            
+
         return output
 
     async def resolution(self, state: Dict[str, Any]) -> Dict[str, Any]:
