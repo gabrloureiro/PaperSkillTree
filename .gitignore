@@ -30,6 +30,10 @@ cache/
 *.pdf
 !dummy_test.pdf
 
+# Logs (agent debug traces, pipeline run logs)
+*.log
+logs/
+
 # IDEs and Editors
 .vscode/
 !.vscode/extensions.json
